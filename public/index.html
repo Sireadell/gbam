@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PriceKeeper Voice</title>
+<meta name="description" content="Talk to your shop's record book. Say the sale, hear it back, say yes.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231f5f3f'/><text x='16' y='22' font-size='15' font-family='Arial' font-weight='700' fill='white' text-anchor='middle'>PK</text></svg>">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark">PK</span><div><strong>PriceKeeper Voice</strong><span id="shopName" class="shop"></span></div></div>
+  <button id="resetBtn" class="ghost small" title="Put the sample shop back as it started">Reset sample shop</button>
+</header>
+
+<main class="grid">
+  <section class="talk card">
+    <div class="talk-head">
+      <button id="micBtn" class="mic" aria-label="Start talking">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg>
+      </button>
+      <div>
+        <div id="micLabel" class="mic-label">Tap to start talking</div>
+        <div id="status" class="status">Say a sale like: "Two bags of rice to Musa"</div>
+      </div>
+    </div>
+
+    <div id="log" class="log" aria-live="polite"></div>
+
+    <div id="draft" class="draft" hidden>
+      <div class="draft-title">Waiting for your yes</div>
+      <div id="draftBody"></div>
+      <div class="draft-actions">
+        <button id="confirmBtn" class="primary">Yes, save</button>
+        <button id="cancelBtn" class="ghost">Cancel</button>
+      </div>
+    </div>
+
+    <form id="typeForm" class="type">
+      <input id="typeInput" placeholder="Or type it, e.g. Chinedu paid 5k" autocomplete="off" disabled>
+      <button class="ghost" disabled id="typeBtn">Send</button>
+    </form>
+    <div class="tries" id="tries"></div>
+  </section>
+
+  <aside class="side">
+    <section class="card">
+      <h2>Customers</h2>
+      <div id="stats" class="stats"></div>
+      <ul id="customers" class="customers"></ul>
+    </section>
+
+    <section class="card">
+      <h2>Receipts</h2>
+      <ul id="receipts" class="receipts"><li class="empty">Nothing saved yet today.</li></ul>
+    </section>
+
+    <section class="card">
+      <h2>Words AssemblyAI listens for</h2>
+      <p class="hint">Taken from this shop's own customers and stock, and sent to AssemblyAI as key terms. A new customer is added the moment they are saved.</p>
+      <div id="keyterms" class="chips"></div>
+    </section>
+
+    <details class="card">
+      <summary>What the agent did (tool calls)</summary>
+      <ol id="tools" class="tools"></ol>
+    </details>
+  </aside>
+</main>
+
+<dialog id="receiptDlg" class="receipt"><div id="receiptBody"></div><form method="dialog"><button class="ghost">Close</button></form></dialog>
+<dialog id="custDlg" class="receipt"><div id="custBody"></div><form method="dialog"><button class="ghost">Close</button></form></dialog>
+
+<footer class="real">
+  <strong>What is real here:</strong> the voice conversation is live AssemblyAI (Voice Agent API: speech recognition, reasoning and speech).
+  The shop, customers and prices are sample data kept in your browser only. Every total is worked out by the app's code, never by the AI, and nothing is saved until you say yes.
+</footer>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
