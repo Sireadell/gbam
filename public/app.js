@@ -199,6 +199,17 @@ function showReceiptFromHash() {
 window.addEventListener("hashchange", showReceiptFromHash);
 $("#receiptDlg").addEventListener("close", () => { if (location.hash) history.replaceState(null, "", location.pathname); });
 
+// For support: everything the session did except audio, to paste back to us.
+$("#copyLog").onclick = async () => {
+  const lines = (agent.debugLog || []).map(e => {
+    const m = { ...e.m };
+    if (m.token) m.token = "(hidden)";
+    return `${new Date(e.t).toISOString().slice(11, 23)} ${e.dir} ${JSON.stringify(m)}`;
+  }).join("\n") || "No session yet.";
+  try { await navigator.clipboard.writeText(lines); $("#copyLogMsg").textContent = "Copied. Paste it to us."; }
+  catch { $("#logOut").hidden = false; $("#logOut").value = lines; $("#logOut").select(); $("#copyLogMsg").textContent = "Select all and copy."; }
+};
+
 function logTool(name, args, result) {
   const li = document.createElement("li");
   li.innerHTML = `<b>${esc(name)}</b>(${esc(JSON.stringify(args))})<br><span class="${result.ok ? "ok" : "err"}">→ ${esc(result.say || result.error)}</span>`;

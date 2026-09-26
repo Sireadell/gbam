@@ -152,6 +152,9 @@ export class ShopAgent {
   // When running on your own computer, every event except raw audio is written
   // to logs/ by the server, so a session that went wrong can be replayed.
   trace(dir, m) {
+    // Everywhere: keep the last 400 events in memory for "Copy session log".
+    (this.debugLog ||= []).push({ t: Date.now(), dir, m });
+    if (this.debugLog.length > 400) this.debugLog.shift();
     if (typeof location === "undefined" || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
     (this.traceBuf ||= []).push({ t: Date.now(), dir, m });
     this.traceTimer ||= setTimeout(() => {
@@ -203,8 +206,11 @@ export class ShopAgent {
       case "transcript.agent": this.agentReply = null; this.on.agent(m.text, true); break;
       case "reply.done":
         this.lastEvent = m.type;
-        if (m.status === "interrupted") { this.flushPlayback(); this.pending = []; }
-        else this.flushTools();
+        // Even after an interruption the agent still waits for its tool
+        // result. Dropping it (as the docs sample does) left the owner
+        // talking to a silent agent, so the result is always sent.
+        if (m.status === "interrupted") this.flushPlayback();
+        this.flushTools();
         break;
       case "tool.call": this.onTool(m); break;
       case "session.ended": this.cleanup(); break;
@@ -217,6 +223,14 @@ export class ShopAgent {
     this.on.tool(m.name, m.arguments, result);
     this.pending.push({ call_id: m.call_id, result });
     this.flushTools();
+    // Market noise can keep "someone is speaking" going, which holds results
+    // back. After 4 seconds, send anyway rather than leave the agent silent.
+    clearTimeout(this.toolWatchdog);
+    this.toolWatchdog = setTimeout(() => {
+      if (!this.pending.length) return;
+      this.lastEvent = "reply.done";
+      this.flushTools();
+    }, 4000);
   }
 
   // Results go back only when reply.done is the latest event, as the API requires.
