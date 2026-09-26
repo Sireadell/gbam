@@ -252,6 +252,33 @@ function logTool(name, args, result) {
   $("#tools").prepend(li);
 }
 
+// ---------- export ----------
+
+// Kippa went offline in 2024 and its traders lost their books. Here every
+// record downloads as a spreadsheet file that opens in Excel or Sheets.
+function csv(rows) {
+  return rows.map(r => r.map(v => {
+    const s = String(v ?? "");
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(",")).join("\r\n");
+}
+$("#exportBtn").onclick = () => {
+  const st = store.state;
+  const rows = [["Section", "Date", "Receipt", "Customer or product", "What", "Amount (NGN)", "Balance after (NGN)"]];
+  for (const c of st.customers) {
+    for (const e of c.entries) rows.push(["Customer entry", e.ts.slice(0, 10), e.ref || "", c.name, `${e.type === "debt" ? "Took goods" : "Paid"}: ${e.note || ""}`, e.type === "debt" ? e.amount : -e.amount, ""]);
+    rows.push(["Customer balance", "", "", c.name, "Owes (+) or deposit held (-)", "", balanceOf(c).balance]);
+  }
+  for (const p of st.products) rows.push(["Stock", "", "", p.name, `${p.stock} in stock, bought at ${p.cost ?? "?"}`, p.price, ""]);
+  for (const r of st.receipts.slice().reverse()) rows.push(["Receipt", r.ts.slice(0, 10), r.ref, r.customer || r.product || "", r.kind + (r.note ? ": " + r.note : ""), r.total ?? r.paid ?? "", r.after ?? ""]);
+  const blob = new Blob(["﻿" + csv(rows)], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `gbam-records-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+};
+
 // ---------- reset ----------
 
 let armed = null;
