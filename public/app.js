@@ -36,7 +36,7 @@ const agent = new ShopAgent({
     saved: r => { renderAll(); if (r.customer) flash(r.customer); },
     focus: name => flash(name),
     tool: logTool,
-    ended: () => setLive(false),
+    ended: reason => setLive(false, reason),
   },
 });
 
@@ -55,12 +55,12 @@ $("#micBtn").onclick = async () => {
   } finally { $("#micBtn").disabled = false; }
 };
 
-function setLive(on) {
+function setLive(on, reason) {
   live = on;
   $("#micBtn").classList.toggle("live", on);
   $("#micBtn").setAttribute("aria-label", on ? "Stop talking" : "Start talking");
   $("#micLabel").textContent = on ? "Listening. Tap to stop" : "Tap to start talking";
-  if (!on) { $("#status").textContent = "Stopped. Tap to start again."; setTyping(false); }
+  if (!on) { $("#status").textContent = reason || "Stopped. Tap to start again."; setTyping(false); }
 }
 function setTyping(on) { $("#typeInput").disabled = !on; $("#typeBtn").disabled = !on; }
 

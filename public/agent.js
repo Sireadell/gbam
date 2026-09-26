@@ -115,7 +115,7 @@ export class ShopAgent {
     this.ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(body.token)}`);
     this.ws.onopen = () => this.send({ type: "session.update", session: this.sessionConfig() });
     this.ws.onmessage = ev => this.handle(JSON.parse(ev.data));
-    this.ws.onclose = () => { this.cleanup(); this.on.ended(); };
+    this.ws.onclose = () => { this.cleanup(); this.on.ended(this.endReason); this.endReason = null; };
     return { mic };
   }
 
@@ -126,6 +126,7 @@ export class ShopAgent {
 
   cleanup() {
     this.ready = false;
+    clearTimeout(this.idleTimer);
     this.stream?.getTracks().forEach(t => t.stop());
     this.micCtx?.close().catch(() => {});
     this.playCtx?.close().catch(() => {});
@@ -154,6 +155,7 @@ export class ShopAgent {
   // Typed input, for noisy moments or a judge without a microphone.
   typed(text) {
     this.lastUser = text;
+    this.bumpIdle();
     this.on.user(text, true);
     // A bare conversation.message is not seen by the next reply (tested: the
     // agent answered as if nothing was said, and once guessed a sale). The
@@ -162,8 +164,21 @@ export class ShopAgent {
     this.send({ type: "reply.create", instructions: `The owner typed instead of speaking: "${text.replace(/"/g, "'")}". Treat it exactly as if they had said it, and act on it.` });
   }
 
+  // The Voice Agent API bills for every second a session is open ($4.50 an
+  // hour), so a quiet counter must not keep a session running. Hang up after
+  // 20 quiet seconds, or 60 while a draft waits for a yes.
+  bumpIdle() {
+    clearTimeout(this.idleTimer);
+    if (!this.ready) return;
+    this.idleTimer = setTimeout(() => {
+      this.endReason = "Hung up after a quiet spell, to save cost. Tap to talk again.";
+      this.stop();
+    }, this.draft ? 60000 : 20000);
+  }
+
   handle(m) {
     if (m.type !== "reply.audio" && m.type !== "transcript.agent.delta") this.trace("in", m);
+    if (["session.ready", "input.speech.started", "transcript.user", "reply.done", "tool.call"].includes(m.type)) this.bumpIdle();
     switch (m.type) {
       case "session.ready": this.ready = true; this.on.status(this.worklet ? "Listening" : "No microphone here. Type below, the agent still answers out loud."); this.on.ready(); break;
       case "input.speech.started": this.lastEvent = m.type; this.on.hearing(true); break;
