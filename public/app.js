@@ -10,7 +10,15 @@ const store = {
   save() { try { localStorage.setItem(KEY, JSON.stringify(this.state)); } catch {} },
 };
 function load() {
-  try { const s = JSON.parse(localStorage.getItem(KEY)); if (s?.customers) return s; } catch {}
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s?.customers) {
+      s.expenses ||= [];
+      const seed = freshState().products;
+      for (const p of s.products) if (p.cost == null) p.cost = seed.find(x => x.name === p.name)?.cost ?? null;
+      return s;
+    }
+  } catch {}
   return freshState();
 }
 
@@ -23,6 +31,12 @@ const TRIES = [
   "How much I make today?",
   "Remind Emeka",
   "Chinedu don pay 5k",
+  "Add 20 bags of rice, I buy am 2,800 each from Alhaji Sule",
+  "How many Indomie remain?",
+  "New product: Milo tin, sell 2,000",
+  "Rice now 3,200",
+  "I spend 2,000 on transport",
+  "Sell 2 sugar to Blessing, she paid by transfer, give am 300 off",
 ];
 
 let partialYou = null, partialAgent = null;
@@ -102,13 +116,20 @@ function renderDraft(d) {
     rows = d.lines.map(l => `<tr><td>${l.quantity} × ${esc(l.product)}${l.inStock ? "" : " <small>(not in stock list)</small>"}</td><td class="n">${naira(l.unit_price)}</td><td class="n">${naira(l.line_total)}</td></tr>`).join("");
     rows += `<tr class="total"><td>Total</td><td></td><td class="n">${naira(d.total)}</td></tr>`;
     if (d.customer && d.paid > 0) rows += `<tr><td>Paid now</td><td></td><td class="n">${naira(d.paid)}</td></tr>`;
-  } else {
+    if (d.discount) rows = rows.replace('<tr class="total">', `<tr><td>Discount</td><td></td><td class="n">−${naira(d.discount)}</td></tr><tr class="total">`);
+  } else if (d.kind === "payment") {
     rows = `<tr><td>${esc(d.customer)} pays</td><td class="n">${naira(d.amount)}</td></tr>`;
+  } else {
+    $("#draftBody").innerHTML = `<div><b>${STOCK_TITLES[d.kind]}</b></div><p>${esc(d.say.replace(/ Say yes\.$/, ""))}</p>`;
+    return;
   }
-  const who = d.customer ? `${esc(d.customer)}${d.isNew ? " (new customer)" : ""}` : "Walk-in, paid cash";
+  const how = d.method && d.method !== "cash" ? ` by ${d.method === "pos" ? "POS" : "transfer"}` : "";
+  const who = d.customer ? `${esc(d.customer)}${d.isNew ? " (new customer)" : ""}${d.paid > 0 && how ? ", paid" + how : ""}` : `Walk-in, paid${how || " cash"}`;
   $("#draftBody").innerHTML = `<div><b>${who}</b></div><table>${rows}</table>` +
     (d.customer ? `<div class="after">${afterText(d.customer, d.after)}</div>` : "");
 }
+const STOCK_TITLES = { restock: "Stock coming in", product: "New product", price: "Price change", expense: "Money spent" };
+
 function afterText(name, b) {
   if (b > 0) return `${esc(name)} will owe <span class="amt owe">${naira(b)}</span>`;
   if (b < 0) return `You will be holding <span class="amt hold">${naira(-b)}</span> for ${esc(name)}`;
@@ -131,13 +152,22 @@ function renderAll() {
   $("#customers").innerHTML = rows.map(({ c, b }) => `<li data-name="${esc(c.name)}"><span>${esc(c.name)}</span>${amt(b)}</li>`).join("");
   $("#customers").querySelectorAll("li").forEach(li => li.onclick = () => showCustomer(li.dataset.name));
 
+  $("#stock").innerHTML = st.products.map(p => `<li class="${p.stock <= 5 ? "low" : ""}"><span>${esc(p.name)}</span><span class="amt">${p.stock} · ${naira(p.price)}</span></li>`).join("");
   $("#receipts").innerHTML = st.receipts.length
-    ? st.receipts.slice(0, 12).map(r => `<li data-ref="${r.ref}"><span>${esc(r.customer || "Walk-in")} · ${r.kind === "sale" ? naira(r.total) + " sale" : naira(r.paid) + " paid"}</span><span class="ref">${r.ref}</span></li>`).join("")
+    ? st.receipts.slice(0, 12).map(r => `<li data-ref="${r.ref}"><span>${receiptLabel(r)}</span><span class="ref">${r.ref}</span></li>`).join("")
     : `<li class="empty">Nothing saved yet.</li>`;
   $("#receipts").querySelectorAll("li[data-ref]").forEach(li => li.onclick = () => { location.hash = "receipt=" + li.dataset.ref; });
 
   $("#keyterms").innerHTML = shopKeyterms(st).map(t => `<span class="chip">${esc(t)}</span>`).join("");
   if (!$("#log").children.length) $("#log").innerHTML = `<div class="empty">Tap the microphone and talk the way you would to a shop assistant.<br>Nothing is saved until you say yes.</div>`;
+}
+function receiptLabel(r) {
+  if (r.kind === "sale") return `${esc(r.customer || "Walk-in")} · ${naira(r.total)} sale`;
+  if (r.kind === "payment") return `${esc(r.customer)} · ${naira(r.paid)} paid`;
+  if (r.kind === "restock") return `Stock in · ${r.quantity} ${esc(r.product)}`;
+  if (r.kind === "product") return `New product · ${esc(r.product)}`;
+  if (r.kind === "price") return `Price · ${esc(r.product)} ${naira(r.to)}`;
+  return `Spent · ${naira(r.total)} ${esc(r.note)}`;
 }
 function amt(b) {
   if (b > 0) return `<span class="amt owe">owes ${naira(b)}</span>`;
@@ -182,7 +212,13 @@ function showReceiptFromHash() {
     body += r.lines.map(l => `<tr><td>${l.quantity} × ${esc(l.product)}</td><td class="n">${naira(l.line_total)}</td></tr>`).join("");
     body += `<tr><td><b>Total</b></td><td class="n"><b>${naira(r.total)}</b></td></tr>`;
     if (r.customer) body += `<tr><td>Paid now</td><td class="n">${naira(r.paid)}</td></tr>`;
-  } else body += `<tr><td>Payment from ${esc(r.customer)}</td><td class="n">${naira(r.paid)}</td></tr>`;
+    if (r.discount) body += `<tr><td>Discount given</td><td class="n">${naira(r.discount)}</td></tr>`;
+    if (r.method && r.method !== "cash") body += `<tr><td>Paid by</td><td class="n">${r.method === "pos" ? "POS" : "Transfer"}</td></tr>`;
+  } else if (r.kind === "payment") body += `<tr><td>Payment from ${esc(r.customer)}</td><td class="n">${naira(r.paid)}</td></tr>`;
+  else if (r.kind === "restock") body += `<tr><td>${r.quantity} × ${esc(r.product)} in${r.supplier ? " from " + esc(r.supplier) : ""}</td><td class="n">${r.total ? naira(r.total) : ""}</td></tr>`;
+  else if (r.kind === "product") body += `<tr><td>New product ${esc(r.product)}</td><td class="n">${naira(r.item.price)}</td></tr>`;
+  else if (r.kind === "price") body += `<tr><td>${esc(r.product)}: ${naira(r.from)} to</td><td class="n">${naira(r.to)}</td></tr>`;
+  else body += `<tr><td>Spent on ${esc(r.note)}</td><td class="n">${naira(r.total)}</td></tr>`;
   body += `</table>`;
   if (r.customer) body += `<div>${esc(r.customer)}: ${amt(r.after)} after this.</div>`;
   body += `<p><button type="button" class="ghost small" id="undoBtn">Undo this, it was a mistake</button></p>`;

@@ -10,16 +10,16 @@
 export const SEED = {
   shop: { name: "Mama Bisi Provisions", city: "Lagos" },
   products: [
-    { name: "Rice (50kg bag)", say: "rice", price: 3000, unit: "bag", stock: 40 },
-    { name: "Beans (half bag)", say: "beans", price: 22000, unit: "half bag", stock: 12 },
-    { name: "Indomie (carton)", say: "Indomie", price: 8500, unit: "carton", stock: 25 },
-    { name: "Groundnut oil (bottle)", say: "groundnut oil", price: 2200, unit: "bottle", stock: 30 },
-    { name: "Peak milk (pack)", say: "Peak milk", price: 1800, unit: "pack", stock: 50 },
-    { name: "Tomato paste (tin)", say: "tomato paste", price: 700, unit: "tin", stock: 80 },
-    { name: "Golden Penny spaghetti (carton)", say: "Golden Penny spaghetti", price: 9500, unit: "carton", stock: 15 },
-    { name: "Garri (paint bucket)", say: "garri", price: 2500, unit: "bucket", stock: 20 },
-    { name: "Sugar (pack)", say: "sugar", price: 1500, unit: "pack", stock: 40 },
-    { name: "Semovita (10kg)", say: "Semovita", price: 11000, unit: "bag", stock: 10 },
+    { name: "Rice (50kg bag)", say: "rice", price: 3000, cost: 2500, unit: "bag", stock: 40 },
+    { name: "Beans (half bag)", say: "beans", price: 22000, cost: 19000, unit: "half bag", stock: 12 },
+    { name: "Indomie (carton)", say: "Indomie", price: 8500, cost: 7600, unit: "carton", stock: 25 },
+    { name: "Groundnut oil (bottle)", say: "groundnut oil", price: 2200, cost: 1850, unit: "bottle", stock: 30 },
+    { name: "Peak milk (pack)", say: "Peak milk", price: 1800, cost: 1550, unit: "pack", stock: 50 },
+    { name: "Tomato paste (tin)", say: "tomato paste", price: 700, cost: 560, unit: "tin", stock: 80 },
+    { name: "Golden Penny spaghetti (carton)", say: "Golden Penny spaghetti", price: 9500, cost: 8400, unit: "carton", stock: 15 },
+    { name: "Garri (paint bucket)", say: "garri", price: 2500, cost: 2000, unit: "bucket", stock: 20 },
+    { name: "Sugar (pack)", say: "sugar", price: 1500, cost: 1250, unit: "pack", stock: 40 },
+    { name: "Semovita (10kg)", say: "Semovita", price: 11000, cost: 9800, unit: "bag", stock: 10 },
   ],
   customers: [
     { name: "Musa", entries: [{ type: "debt", amount: 4000, note: "2 packs of sugar and garri", ts: "2026-09-20T10:12:00Z" }] },
@@ -36,6 +36,7 @@ export const SEED = {
     { name: "Ibrahim", entries: [{ type: "payment", amount: 3000, note: "Deposit", ts: "2026-09-24T11:00:00Z" }] },
   ],
   receipts: [],
+  expenses: [],
   seq: 0,
 };
 
@@ -110,6 +111,9 @@ function lev(a, b) {
   return d[a.length][b.length];
 }
 
+const UNIT_WORDS = new Set(["tin", "tins", "bag", "bags", "pack", "packs", "carton", "cartons", "bottle", "bottles",
+  "bucket", "buckets", "half", "kg", "10kg", "50kg", "paint", "sachet", "sachets", "crate", "crates"]);
+
 function score(heard, target) {
   const h = norm(heard), t = norm(target);
   if (!h || !t) return 0;
@@ -120,6 +124,7 @@ function score(heard, target) {
   if (t.startsWith(h) && h.length >= 3) return 0.88;
   let best = 0;                                            // a word or two misheard
   for (const a of hw) for (const b of tw) {
+    if (UNIT_WORDS.has(a) || UNIT_WORDS.has(b)) continue;  // "tin" alone says nothing
     const m = Math.max(a.length, b.length);
     if (m >= 3) best = Math.max(best, 1 - lev(a, b) / m);
   }
@@ -135,7 +140,8 @@ export function bestMatch(list, heard, fields) {
     .sort((a, b) => b.s - a.s);
   if (!scored.length) return { none: true };
   const [top, next] = scored;
-  if (top.s >= 0.8 && (!next || top.s - next.s >= 0.1)) return { match: top.item };
+  if (top.s === 1 && (!next || next.s < 1)) return { match: top.item };
+  if (top.s >= 0.8 && (!next || top.s - next.s >= 0.0999)) return { match: top.item };
   return { candidates: scored.slice(0, 3).map(x => x.item) };
 }
 
@@ -180,6 +186,7 @@ export function draftSale(state, args) {
       product: product ? product.name : titleCase(it.product),
       say: product ? countOf(qty, product.unit, product.say) : `${qty} ${it.product}`,
       inStock: !!product,
+      cost: product && product.cost != null ? product.cost : null,
       quantity: qty,
       unit_price: unit,
       line_total: round2(qty * unit),
@@ -187,21 +194,25 @@ export function draftSale(state, args) {
   }
   if (errs.length) return fail(`Could not prepare the sale: ${errs.join("; ")}. ${lines.length ? `Understood so far: ${lines.map(l => l.say).join(", ")}.` : ""} Ask only for what is missing.`);
 
-  const total = round2(lines.reduce((s, l) => s + l.line_total, 0));
+  const gross = round2(lines.reduce((s, l) => s + l.line_total, 0));
+  const discount = Number(args.discount) > 0 ? round2(Number(args.discount)) : 0;
+  if (discount >= gross) return fail(`A discount of ${spoken(discount)} is more than the sale itself (${spoken(gross)}). Ask the owner for the discount again.`);
+  const total = round2(gross - discount);
   const paid = args.amount_paid != null && args.amount_paid !== "" ? Number(args.amount_paid) : (customer ? 0 : total);
+  const method = paymentMethod(args.payment_method);
   if (!(paid >= 0)) return fail("amount_paid is not a number. Ask how much was paid.");
   if (!customer && paid < total) return fail(`A sale with no customer name must be paid in full (${spoken(total)}). Ask who the customer is, so the rest can go on their account.`);
 
   const before = customer ? balanceOf(customer).balance : 0;
   const after = round2(before + total - paid);
   const list = lines.map(l => `${l.say} at ${inWords(l.unit_price)}`).join(", ");
-  let say = `${list}. Total ${spoken(total)}.`;
+  let say = discount ? `${list}. Less ${inWords(discount)} discount, total ${spoken(total)}.` : `${list}. Total ${spoken(total)}.`;
   if (customer) {
-    if (paid > 0) say += ` Paid ${spoken(paid)}.`;
+    if (paid > 0) say += ` Paid ${spoken(paid)}${method !== "cash" ? " by " + METHOD_WORDS[method] : ""}.`;
     if (before < 0 && total > paid) say += ` Uses their deposit.`;
     say += ` ${cap(futureStandingText(customer.name, after))}.`;
     if (isNew) say += ` ${customer.name} is a new customer.`;
-  } else say += " Paid in cash.";
+  } else say += method === "cash" ? " Paid in cash." : ` Paid by ${METHOD_WORDS[method]}.`;
   say += " Say yes.";
 
   const warn = lines.filter(l => l.inStock).map(l => {
@@ -210,7 +221,7 @@ export function draftSale(state, args) {
   }).filter(Boolean);
   if (warn.length) say = warn.join(" ") + " " + say;
 
-  return { ok: true, draft: { kind: "sale", customer: customer ? customer.name : null, isNew, lines, total, paid, before, after, say } };
+  return { ok: true, draft: { kind: "sale", customer: customer ? customer.name : null, isNew, lines, gross, discount, total, paid, method, before, after, say } };
 }
 
 export function draftPayment(state, args) {
@@ -252,14 +263,17 @@ export function commit(state, draft, now = new Date()) {
       customer.entries.push({ type: "debt", amount: draft.total, note, ts, ref });
       if (draft.paid > 0) customer.entries.push({ type: "payment", amount: draft.paid, note: "Paid at sale", ts, ref });
     }
-  } else {
+  } else if (draft.kind === "payment") {
     customer.entries.push({ type: "payment", amount: draft.amount, note: "Payment", ts, ref });
+  } else {
+    return commitStock(state, draft, ref, ts);
   }
   const after = customer ? balanceOf(customer).balance : 0;
   const receipt = { ref, ts, kind: draft.kind, customer: draft.customer, lines: draft.lines || null,
-    total: draft.total ?? null, paid: draft.kind === "sale" ? draft.paid : draft.amount, before: draft.before, after };
+    total: draft.total ?? null, paid: draft.kind === "sale" ? draft.paid : draft.amount, before: draft.before, after,
+    discount: draft.discount || 0, method: draft.method || "cash", profit: draft.kind === "sale" ? saleProfit(draft) : null };
   state.receipts.unshift(receipt);
-  const say = `Saved, receipt ${inWords(state.seq)}.${customer ? cap(standingText(customer.name, after)) + "." : ""}`;
+  const say = `Saved, receipt ${inWords(state.seq)}.${customer ? " " + cap(standingText(customer.name, after)) + "." : ""}`;
   return { receipt, say };
 }
 
@@ -272,6 +286,11 @@ export function undo(state, ref) {
   if (r.kind === "sale") for (const l of r.lines) {
     const p = state.products.find(x => x.name === l.product);
     if (p) p.stock += l.quantity;
+  }
+  if (["restock", "product", "price", "expense"].includes(r.kind)) {
+    undoStock(state, r);
+    state.receipts.splice(i, 1);
+    return { ok: true, receipt: r, say: `Undone. ${cap(stockWhat(r))} is removed.` };
   }
   const c = r.customer ? state.customers.find(x => x.name === r.customer) : null;
   if (c) c.entries = c.entries.filter(e => e.ref !== r.ref);
@@ -287,12 +306,17 @@ export function todaySummary(state, now = new Date()) {
   const today = state.receipts.filter(r => r.ts.slice(0, 10) === day);
   const sales = today.filter(r => r.kind === "sale");
   const sold = round2(sales.reduce((s, r) => s + r.total, 0));
-  const cash = round2(today.reduce((s, r) => s + (r.paid || 0), 0));
+  const cash = round2(today.filter(r => r.kind === "sale" || r.kind === "payment").reduce((s, r) => s + (r.paid || 0), 0));
+  const spent = round2(today.filter(r => r.kind === "expense").reduce((s, r) => s + r.total, 0));
+  const known = sales.filter(r => r.profit != null);
+  const profit = round2(known.reduce((s, r) => s + r.profit, 0));
   const credit = round2(sales.filter(r => r.customer).reduce((s, r) => s + Math.max(0, r.total - r.paid), 0));
-  if (!today.length) return { sales: 0, sold: 0, cash: 0, credit: 0, say: "Nothing recorded today yet." };
+  if (!sales.length && !spent && !today.some(r => r.kind === "payment")) return { sales: 0, sold: 0, cash: 0, credit: 0, profit: 0, spent, say: spent ? `No sales yet today. Spent ${spoken(spent)}.` : "Nothing recorded today yet." };
   let say = `Today: ${sales.length} ${sales.length === 1 ? "sale" : "sales"}, ${spoken(sold)}. Cash in, ${spoken(cash)}.`;
   if (credit > 0) say += ` On credit, ${spoken(credit)}.`;
-  return { sales: sales.length, sold, cash, credit, say };
+  if (known.length) say += ` Profit${known.length < sales.length ? " on what I know the cost of" : ""}, ${spoken(profit)}.`;
+  if (spent) say += ` Spent, ${spoken(spent)}.`;
+  return { sales: sales.length, sold, cash, credit, profit, spent, say };
 }
 
 // "Remind Emeka": a polite message the owner sends from their own WhatsApp.
@@ -324,3 +348,141 @@ function countOf(qty, unit, name) {
 function fail(error) { return { ok: false, error }; }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function titleCase(s) { return String(s).trim().replace(/\s+/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
+
+// ---------- stock, prices and expenses ----------
+
+const METHOD_WORDS = { cash: "cash", transfer: "transfer", pos: "P O S" };
+function paymentMethod(heard) {
+  const h = norm(heard);
+  if (/transfer|bank|send/.test(h)) return "transfer";
+  if (/pos|card|p o s/.test(h)) return "pos";
+  return "cash";
+}
+
+// Profit on a sale is only known when every line's buying price is known.
+function saleProfit(d) {
+  if (d.lines.some(l => l.cost == null)) return null;
+  return round2(d.lines.reduce((s, l) => s + (l.unit_price - l.cost) * l.quantity, 0) - (d.discount || 0));
+}
+
+function findProduct(state, heard) {
+  const m = bestMatch(state.products, heard, ["name", "say"]);
+  if (m.match) return { product: m.match };
+  if (m.candidates) return fail(`Product '${heard}' is unclear. Close ones: ${m.candidates.map(p => p.say).join(", ")}. Ask which.`);
+  return fail(`'${heard}' is not in the stock list. Ask if it is a new product; if yes use draft_new_product.`);
+}
+
+// "Add 20 bags of rice, I bought at 2,500 each": stock goes up, and the
+// buying price becomes the average of old and new stock.
+export function draftRestock(state, args) {
+  const qty = Number(args.quantity);
+  if (!(qty > 0)) return fail("How many were added is missing. Ask the quantity.");
+  const f = findProduct(state, args.product);
+  if (!f.product) return f;
+  const p = f.product;
+  const unitCost = args.unit_cost != null && args.unit_cost !== "" ? Number(args.unit_cost) : null;
+  if (unitCost != null && !(unitCost > 0)) return fail("The buying price is not a number. Ask what they paid for each.");
+  if (unitCost != null && !args.price_confirmed && p.cost && (unitCost < p.cost / 4 || unitCost > p.cost * 4))
+    return fail(`The buying price ${spoken(unitCost)} for ${p.say} looks wrong (last time ${spoken(p.cost)}). Ask the owner to say it again, then call again with price_confirmed true if they repeat it.`);
+  const newCost = unitCost == null ? p.cost ?? null
+    : p.cost == null || p.stock <= 0 ? unitCost
+    : round2((p.stock * p.cost + qty * unitCost) / (p.stock + qty));
+  let say = `Add ${countOf(qty, p.unit, p.say)}`;
+  if (unitCost != null) say += ` at ${inWords(unitCost)} each, ${spoken(qty * unitCost)} in all`;
+  if (args.supplier) say += `, from ${titleCase(args.supplier)}`;
+  say += `. Stock goes from ${p.stock} to ${p.stock + qty}. Say yes.`;
+  if (unitCost != null && unitCost >= p.price) say = `Careful, you pay ${inWords(unitCost)} but sell at ${inWords(p.price)}. ` + say;
+  return { ok: true, draft: { kind: "restock", product: p.name, quantity: qty, unit_cost: unitCost, total: unitCost == null ? 0 : round2(qty * unitCost),
+    supplier: args.supplier ? titleCase(args.supplier) : null, prevCost: p.cost ?? null, newCost, say } };
+}
+
+export function draftNewProduct(state, args) {
+  const name = String(args.name || "").trim();
+  if (!name) return fail("The product name is missing. Ask for it.");
+  const price = Number(args.sell_price);
+  if (!(price > 0)) return fail("The selling price is missing. Ask what it sells for.");
+  const m = bestMatch(state.products, name, ["name", "say"]);
+  if (m.match && norm(m.match.say) === norm(name)) return fail(`'${m.match.say}' is already in the stock list. To add more of it use draft_restock; to change its price use draft_price_change.`);
+  const cost = Number(args.unit_cost) > 0 ? Number(args.unit_cost) : null;
+  const stock = Number(args.quantity) > 0 ? Number(args.quantity) : 0;
+  const unit = args.unit ? String(args.unit).trim().toLowerCase() : "";
+  const say = `New product ${titleCase(name)}, selling at ${spoken(price)}${unit ? " a " + unit : ""}${cost ? `, bought at ${inWords(cost)}` : ""}${stock ? `, ${stock} in stock` : ""}. Say yes.`;
+  // "Milo tin" sold in tins is spoken "2 tins of Milo", not "2 tins of Milo Tin".
+  const words = titleCase(name).split(" ");
+  const sayName = words.length > 1 && unit && words[words.length - 1].toLowerCase().replace(/s$/, "") === unit.replace(/s$/, "")
+    ? words.slice(0, -1).join(" ") : titleCase(name);
+  return { ok: true, draft: { kind: "product", product: titleCase(name), item: { name: titleCase(name), say: sayName, price, cost, unit, stock }, say } };
+}
+
+export function draftPriceChange(state, args) {
+  const f = findProduct(state, args.product);
+  if (!f.product) return f;
+  const p = f.product;
+  const price = Number(args.sell_price);
+  if (!(price > 0)) return fail("The new price is missing. Ask for it.");
+  if (!args.price_confirmed && (price < p.price / 4 || price > p.price * 4))
+    return fail(`${spoken(price)} for ${p.say} looks wrong (now ${spoken(p.price)}). Ask the owner to say it again, then call again with price_confirmed true if they repeat it.`);
+  let say = `${cap(p.say)} goes from ${inWords(p.price)} to ${spoken(price)}. Say yes.`;
+  if (p.cost && price <= p.cost) say = `Careful, that is not more than the ${inWords(p.cost)} you paid. ` + say;
+  return { ok: true, draft: { kind: "price", product: p.name, from: p.price, to: price, say } };
+}
+
+export function draftExpense(state, args) {
+  const amount = Number(args.amount);
+  if (!(amount > 0)) return fail("The amount spent is missing. Ask how much.");
+  const note = String(args.what || "").trim() || "expense";
+  return { ok: true, draft: { kind: "expense", note, total: amount, say: `Spent ${spoken(amount)} on ${note}. Say yes.` } };
+}
+
+// "How many rice remain?" for one product, or what is running low.
+export function stockReport(state, heard) {
+  if (heard && String(heard).trim()) {
+    const f = findProduct(state, heard);
+    if (!f.product) return f;
+    const p = f.product;
+    return { ok: true, say: `${countOf(p.stock, p.unit, p.say)} left, selling at ${spoken(p.price)}.`.replace(/^./, c => c.toUpperCase()) };
+  }
+  const low = state.products.filter(p => p.stock <= 5).sort((a, b) => a.stock - b.stock);
+  if (!low.length) return { ok: true, say: "Nothing is running low. Everything has more than five left." };
+  return { ok: true, say: "Running low: " + low.map(p => `${p.say}, ${p.stock} left`).join("; ") + "." };
+}
+
+function commitStock(state, d, ref, ts) {
+  let what;
+  if (d.kind === "restock") {
+    const p = state.products.find(x => x.name === d.product);
+    p.stock += d.quantity;
+    if (d.newCost != null) p.cost = d.newCost;
+    what = `${p.say} is now ${p.stock}`;
+  } else if (d.kind === "product") {
+    state.products.push({ ...d.item });
+    what = `${d.item.say} is in the stock list`;
+  } else if (d.kind === "price") {
+    const p = state.products.find(x => x.name === d.product);
+    p.price = d.to;
+    what = `${p.say} now sells at ${spoken(d.to)}`;
+  } else {
+    (state.expenses ||= []).push({ amount: d.total, note: d.note, ts, ref });
+    what = `spent ${spoken(d.total)} on ${d.note}`;
+  }
+  const receipt = { ref, ts, kind: d.kind, product: d.product || null, quantity: d.quantity ?? null, unit_cost: d.unit_cost ?? null,
+    supplier: d.supplier || null, prevCost: d.prevCost ?? null, item: d.item || null, from: d.from ?? null, to: d.to ?? null,
+    note: d.note || null, total: d.total ?? null, customer: null, paid: 0 };
+  state.receipts.unshift(receipt);
+  return { receipt, say: `Saved. ${cap(what)}.` };
+}
+
+function undoStock(state, r) {
+  const p = r.product ? state.products.find(x => x.name === r.product) : null;
+  if (r.kind === "restock" && p) { p.stock = Math.max(0, p.stock - r.quantity); if (r.prevCost != null) p.cost = r.prevCost; }
+  if (r.kind === "product") state.products = state.products.filter(x => x.name !== r.product);
+  if (r.kind === "price" && p) p.price = r.from;
+  if (r.kind === "expense") state.expenses = (state.expenses || []).filter(e => e.ref !== r.ref);
+}
+
+function stockWhat(r) {
+  if (r.kind === "restock") return `the restock of ${r.quantity} ${r.product}`;
+  if (r.kind === "product") return `the new product ${r.product}`;
+  if (r.kind === "price") return `the price change for ${r.product}`;
+  return `the ${spoken(r.total)} spent on ${r.note}`;
+}

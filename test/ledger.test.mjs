@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo, todaySummary, reminder } from "../public/ledger.js";
+import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo, todaySummary, reminder, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport } from "../public/ledger.js";
 
 const bal = (s, name) => balanceOf(s.customers.find(c => c.name === name)).balance;
 
@@ -146,7 +146,7 @@ test("today's summary counts only today's receipts", () => {
   commit(s, draftSale(s, { customer: "Aisha", items: [{ product: "rice", quantity: 1 }] }).draft, new Date("2026-09-25T11:00:00Z"));
   const t = todaySummary(s, new Date("2026-09-26T18:00:00Z"));
   assert.deepEqual([t.sales, t.sold, t.cash, t.credit], [2, 9000, 23000, 6000]);
-  assert.equal(t.say, "Today: 2 sales, nine thousand naira. Cash in, twenty-three thousand naira. On credit, six thousand naira.");
+  assert.equal(t.say, "Today: 2 sales, nine thousand naira. Cash in, twenty-three thousand naira. On credit, six thousand naira. Profit, one thousand five hundred naira.");
 });
 
 test("reminder is written for what the customer really owes", () => {
@@ -155,4 +155,69 @@ test("reminder is written for what the customer really owes", () => {
   assert.equal(r.text, "Hello Emeka, this is Mama Bisi Provisions. Your balance with us is ₦45,000. Thank you for your custom.");
   assert.equal(reminder(s, "Aisha").text, null);
   assert.equal(reminder(s, "Bola").ok, false);
+});
+
+test("restock adds stock and averages the buying price", () => {
+  const s = freshState();
+  const r = draftRestock(s, { product: "rice", quantity: 20, unit_cost: 2800, supplier: "alhaji sule" });
+  assert.ok(r.ok);
+  assert.equal(r.draft.say, "Add 20 bags of rice at two thousand eight hundred each, fifty-six thousand naira in all, from Alhaji Sule. Stock goes from 40 to 60. Say yes.");
+  commit(s, r.draft);
+  const rice = s.products.find(p => p.say === "rice");
+  assert.equal(rice.stock, 60);
+  assert.equal(rice.cost, 2600); // (40 x 2500 + 20 x 2800) / 60
+  undo(s);
+  assert.equal(rice.stock, 40);
+  assert.equal(rice.cost, 2500);
+  assert.equal(draftRestock(s, { product: "rice", quantity: 5, unit_cost: 25 }).ok, false, "25 naira buying price is questioned");
+});
+
+test("new product joins the stock list and the words AssemblyAI listens for", () => {
+  const s = freshState();
+  const r = draftNewProduct(s, { name: "milo tin", sell_price: 2000, unit_cost: 1700, quantity: 12, unit: "tin" });
+  assert.equal(r.draft.say, "New product Milo Tin, selling at two thousand naira a tin, bought at one thousand seven hundred, 12 in stock. Say yes.");
+  commit(s, r.draft);
+  assert.ok(shopKeyterms(s).includes("Milo"));
+  assert.equal(draftSale(s, { customer: "Aisha", items: [{ product: "milo", quantity: 2 }] }).draft.total, 4000);
+  assert.equal(draftNewProduct(s, { name: "rice", sell_price: 3000 }).ok, false, "rice already exists");
+});
+
+test("price change is read back and can be undone", () => {
+  const s = freshState();
+  const r = draftPriceChange(s, { product: "rice", sell_price: 3200 });
+  assert.equal(r.draft.say, "Rice goes from three thousand to three thousand two hundred naira. Say yes.");
+  commit(s, r.draft);
+  assert.equal(draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: 1 }] }).draft.total, 3200);
+  undo(s);
+  assert.equal(s.products.find(p => p.say === "rice").price, 3000);
+  assert.equal(draftPriceChange(s, { product: "rice", sell_price: 30 }).ok, false);
+});
+
+test("stock check for one product, and what is running low", () => {
+  const s = freshState();
+  assert.equal(stockReport(s, "indomie").say, "25 cartons of Indomie left, selling at eight thousand five hundred naira.");
+  assert.equal(stockReport(s, "").say, "Nothing is running low. Everything has more than five left.");
+  s.products.find(p => p.say === "Semovita").stock = 3;
+  assert.equal(stockReport(s).say, "Running low: Semovita, 3 left.");
+});
+
+test("discount, transfer, and expenses feed today's summary", () => {
+  const s = freshState();
+  const now = new Date("2026-09-26T09:00:00Z");
+  const r = draftSale(s, { customer: "", items: [{ product: "rice", quantity: 2 }], discount: 500, payment_method: "bank transfer" });
+  assert.equal(r.draft.say, "2 bags of rice at three thousand. Less five hundred discount, total five thousand five hundred naira. Paid by transfer. Say yes.");
+  assert.equal(commit(s, r.draft, now).receipt.profit, 500);
+  commit(s, draftExpense(s, { amount: 2000, what: "transport" }).draft, now);
+  assert.equal(todaySummary(s, now).say, "Today: 1 sale, five thousand five hundred naira. Cash in, five thousand five hundred naira. Profit, five hundred naira. Spent, two thousand naira.");
+  assert.equal(draftSale(s, { customer: "", items: [{ product: "sugar", quantity: 1 }], discount: 2000 }).ok, false, "discount bigger than the sale");
+});
+
+test("a unit word like 'tin' does not make two products look alike", () => {
+  const s = freshState();
+  commit(s, draftNewProduct(s, { name: "Milo tin", sell_price: 2000, unit: "tin", quantity: 10 }).draft);
+  const r = draftSale(s, { customer: "Blessing", items: [{ product: "Milo tin", quantity: 2 }], discount: 300, payment_method: "transfer", amount_paid: 3700 });
+  assert.ok(r.ok, r.error);
+  assert.equal(r.draft.total, 3700);
+  assert.equal(bestMatch(s.products, "milo", ["name", "say"]).match.name, "Milo Tin");
+  assert.equal(bestMatch(s.products, "tomato tin", ["name", "say"]).match.say, "tomato paste");
 });

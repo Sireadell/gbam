@@ -116,3 +116,6 @@ dialog form { margin-top: 12px; text-align: right; }
 .remind .draft-title { color: var(--green); }
 .remind p { margin: 4px 0 0; }
 a.primary { text-decoration: none; display: inline-block; }
+
+.stock li { cursor: default; }
+.stock li.low .amt { color: var(--amber); }

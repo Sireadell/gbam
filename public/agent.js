@@ -3,7 +3,7 @@
 // for, and the tools it must use to touch the books. The books never trust
 // the model with a number: tools compute everything and return the sentence
 // to read back.
-import { draftSale, draftPayment, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms } from "./ledger.js";
+import { draftSale, draftPayment, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms } from "./ledger.js";
 
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
 const YES = /\b(gbam|yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct|oya|save am)\b/i;
@@ -26,7 +26,12 @@ Rules:
 11. If a price sounds odd, the tool will say so. Ask the owner to say the price again; only if they repeat the same price, draft again with price_confirmed true.
 12. Money is naira. "3k" or "3 thousand" means 3000. "Two-five" after a thousand amount usually means 2,500; if unsure, ask.
 13. "Gbam" means yes, exactly.
-14. One short sentence per reply. You are talking to a busy person at a counter.`;
+14. Stock coming IN (bought from a supplier, "add", "I buy", "just arrive"): call draft_restock, never draft_sale.
+15. A product not in the stock list with a selling price: draft_new_product. A new price for an existing product: draft_price_change.
+16. "How many X remain/dey", "wetin dey finish", "what is running low": call check_stock.
+17. Money the shop spent that is not stock (transport, rent, NEPA, market levy, food): call draft_expense.
+18. A sale paid by transfer or POS: pass payment_method. A discount ("give am 500 off", "remove 500"): pass discount in naira.
+19. One short sentence per reply. You are talking to a busy person at a counter.`;
 }
 
 const TOOLS = [
@@ -40,6 +45,8 @@ const TOOLS = [
         unit_price: { type: "number", description: "Naira per unit ONLY if the owner said a price, e.g. 3000. Leave out otherwise." } },
         required: ["product", "quantity"] } },
       amount_paid: { type: "number", description: "Naira the customer paid now, only if said. Leave out if nothing was said about payment." },
+      payment_method: { type: "string", enum: ["cash", "transfer", "pos"], description: "How they paid, only if said. 'transfer' for bank transfer, 'pos' for card or POS." },
+      discount: { type: "number", description: "Naira taken off the whole sale, only if the owner gave a discount, e.g. 500." },
       add_new_customer: { type: "boolean", description: "True only after the owner confirmed this is a new customer." },
       price_confirmed: { type: "boolean", description: "True only after the tool said a price looked wrong and the owner repeated the same price." } },
       required: ["customer", "items"] } },
@@ -56,6 +63,41 @@ const TOOLS = [
   { type: "function", name: "cancel_draft",
     description: "Throw away the sale or payment that was read back, when the owner says no or cancel.",
     parameters: { type: "object", properties: {} } },
+  { type: "function", name: "draft_restock",
+    description: "Prepare adding stock that came IN to the shop (bought from a supplier). Call when the owner says how many of which product arrived; the price paid and supplier are optional. Returns the sentence to read back. Does not save.",
+    parameters: { type: "object", properties: {
+      product: { type: "string", description: "Product as said, e.g. 'rice'." },
+      quantity: { type: "number", description: "How many units came in, e.g. 20." },
+      unit_cost: { type: "number", description: "Naira paid for EACH unit, only if said, e.g. 2500." },
+      supplier: { type: "string", description: "Who they bought from, only if said, e.g. 'Alhaji Sule'." },
+      price_confirmed: { type: "boolean", description: "True only after the tool said the price looked wrong and the owner repeated it." } },
+      required: ["product", "quantity"] } },
+  { type: "function", name: "draft_new_product",
+    description: "Prepare adding a product the shop does not stock yet. Needs its name and selling price. Returns the sentence to read back. Does not save.",
+    parameters: { type: "object", properties: {
+      name: { type: "string", description: "Product name, e.g. 'Milo tin'." },
+      sell_price: { type: "number", description: "Naira it sells for, e.g. 2000." },
+      unit: { type: "string", description: "Unit it is sold in, only if said, e.g. 'tin', 'bag', 'carton'." },
+      unit_cost: { type: "number", description: "Naira the shop paid for each, only if said." },
+      quantity: { type: "number", description: "How many are in stock now, only if said." } },
+      required: ["name", "sell_price"] } },
+  { type: "function", name: "draft_price_change",
+    description: "Prepare a new selling price for a product already in stock. Returns the sentence to read back. Does not save.",
+    parameters: { type: "object", properties: {
+      product: { type: "string", description: "Product as said, e.g. 'rice'." },
+      sell_price: { type: "number", description: "The new selling price in naira, e.g. 3200." },
+      price_confirmed: { type: "boolean", description: "True only after the tool said the price looked wrong and the owner repeated it." } },
+      required: ["product", "sell_price"] } },
+  { type: "function", name: "draft_expense",
+    description: "Prepare recording money the shop spent that is not stock, e.g. transport, rent, market levy. Returns the sentence to read back. Does not save.",
+    parameters: { type: "object", properties: {
+      amount: { type: "number", description: "Naira spent, e.g. 2000." },
+      what: { type: "string", description: "What it was for, e.g. 'transport'." } },
+      required: ["amount", "what"] } },
+  { type: "function", name: "check_stock",
+    description: "How many of a product are left, or with no product, what is running low. Returns the sentence to say.",
+    parameters: { type: "object", properties: {
+      product: { type: "string", description: "Product as said, or empty for everything running low." } } } },
   { type: "function", name: "undo_last",
     description: "Take the most recently saved sale or payment back out of the books, when the owner says undo or that it was wrong. Returns the sentence to say.",
     parameters: { type: "object", properties: {} } },
@@ -242,8 +284,10 @@ export class ShopAgent {
 
   runTool(name, args) {
     const st = this.store.state;
-    if (name === "draft_sale" || name === "draft_payment") {
-      const r = name === "draft_sale" ? draftSale(st, args) : draftPayment(st, args);
+    const drafters = { draft_sale: draftSale, draft_payment: draftPayment, draft_restock: draftRestock,
+      draft_new_product: draftNewProduct, draft_price_change: draftPriceChange, draft_expense: draftExpense };
+    if (drafters[name]) {
+      const r = drafters[name](st, args);
       if (!r.ok) return { ok: false, error: r.error };
       this.draft = r.draft;
       this.on.draft(this.draft);
@@ -261,6 +305,10 @@ export class ShopAgent {
       return { ok: true, say: "Cancelled, nothing saved." };
     }
     if (name === "undo_last") return this.undo();
+    if (name === "check_stock") {
+      const r = stockReport(st, args.product);
+      return r.ok ? { ok: true, say: r.say } : { ok: false, error: r.error };
+    }
     if (name === "today_summary") return { ok: true, say: todaySummary(st).say };
     if (name === "remind_customer") {
       const r = reminder(st, args.customer);
@@ -279,13 +327,13 @@ export class ShopAgent {
   }
 
   save() {
-    const hadNew = this.draft.isNew;
+    const hadNew = this.draft.isNew || this.draft.kind === "product";
     const { receipt, say } = commit(this.store.state, this.draft);
     this.store.save();
     this.draft = null;
     this.on.draft(null);
     this.on.saved(receipt);
-    // A new customer's name joins the words AssemblyAI listens for, at once.
+    // A new customer's or product's name joins the words AssemblyAI listens for, at once.
     if (hadNew) this.send({ type: "session.update", session: { input: { keyterms: shopKeyterms(this.store.state) } } });
     return say;
   }
