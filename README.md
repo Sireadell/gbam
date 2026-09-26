@@ -9,6 +9,8 @@ Say the sale. Gbam records it.
 > "Yes."
 > **Gbam:** "Saved, receipt one. Musa owes ten thousand naira."
 
+**Live demo:** https://gbam-chi.vercel.app (no sign-up) · **Proof:** https://gbam-chi.vercel.app/proof.html
+
 ## Why I built this
 
 I built Gbam because I run a business in a Nigerian market and know what happens when you're serving customers, pricing goods and trying to remember credit at the same time.
@@ -34,6 +36,35 @@ What makes it work for one particular shop:
 | Barge-in | "No, wait" stops the read-back straight away. |
 
 The loop: **the ledger teaches the recogniser** (names and products become key terms), and **the recogniser writes the ledger** (through the tools).
+
+## What you can say
+
+| You say | Gbam does |
+|---|---|
+| "Two bags of rice, three thousand each, to Musa" | Sale on Musa's account, new balance read back |
+| "Chinedu don pay 5k" | Payment; overpayment is kept as a deposit |
+| "Sell 2 sugar to Blessing, paid by transfer, give am 300 off" | Discount and payment method recorded |
+| "How much does Emeka owe?" / "Remind Emeka" | Balance read out / WhatsApp reminder prepared for the owner to send |
+| "Add 20 bags of rice, I buy am 2,800 each from Alhaji Sule" | Stock in, buying price averaged, supplier noted |
+| "New product: Milo tin, sell 2,000" / "Rice now 3,200" | Stock list and prices; new names join the key terms at once |
+| "How many rice remain?" / "Wetin dey finish?" | Stock left, or what is running low |
+| "I spend 2,000 on transport" | Expense |
+| "How much I make today?" | Sales, cash in, credit, profit and money spent |
+| "Undo that" | Takes the last save back out |
+| "Yes", "Na so", "Gbam!" | Saves what was read back. Nothing is saved before this |
+
+Every record downloads as a spreadsheet file ("Download my records"), so the owner's books never depend on us staying online.
+
+## Proof that the key terms matter
+
+[proof.html](public/proof.html) sends one microphone to AssemblyAI's Universal-3.5 Pro twice at the same moment. The only difference is Gbam's key terms and shop prompt. With a synthetic voice reading shop sentences:
+
+| Said | Plain | With Gbam's key terms |
+|---|---|---|
+| "Mama Ngozi pay twenty two thousand for Semovita" | "Mom and Gozi pay ₦22,000 for Semovita" | "Mama Ngozi pay ₦22,000 for Semovita" |
+| "Chinedu carry three tins of tomato paste" | "Chindu carry 3 tins of tomato paste" | "Chinedu carry 3 tins of tomato paste" |
+
+A misheard name is a sale on the wrong customer's account. Try it with your own voice on the live page.
 
 ## The safety rule: the AI never does the maths
 
@@ -78,6 +109,7 @@ Deep links: `/#receipt=GB-0926-001` opens a saved receipt, so it can be sent to 
 | `public/agent.js` | The Voice Agent session: config, key terms, tools, audio in and out |
 | `public/ledger.js` | The books: matching, maths, drafts, saving, the read-back sentences |
 | `public/app.js` | The screen |
+| `public/proof.html`, `public/proof.js`, `api/stt-token.js` | The side-by-side proof page and its token route |
 | `public/pcm-worklet.js` | Microphone to 24 kHz PCM, works on Chrome, Firefox and Safari |
 | `test/ledger.test.mjs` | Tests for the maths, deposits, name matching and the "13,000 is not 3,000" case |
 
