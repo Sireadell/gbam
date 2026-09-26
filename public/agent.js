@@ -3,7 +3,7 @@
 // for, and the tools it must use to touch the books. The books never trust
 // the model with a number: tools compute everything and return the sentence
 // to read back.
-import { draftSale, draftPayment, commit, balanceOf, bestMatch, standingText, shopKeyterms } from "./ledger.js";
+import { draftSale, draftPayment, commit, undo, balanceOf, bestMatch, standingText, shopKeyterms } from "./ledger.js";
 
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
 const YES = /\b(yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct)\b/i;
@@ -17,9 +17,11 @@ Rules:
 2. When a tool result has a "say" field, speak it word for word, then stop. Do not add, round or reword numbers.
 3. A sale: call draft_sale once you have the products, quantities and the customer's name (or they said it was a cash walk-in). Prices are optional, the shop's stock list has them.
 4. Money received from a customer: call draft_payment.
-5. Save only with confirm_draft, and only right after the owner clearly agrees. If they correct anything, draft again with the correction. If they say "no" or "wait" without a correction, keep the draft and ask what to change. Use cancel_draft only when they say cancel, forget it, or leave it.
+5. Save only with confirm_draft, and only right after the owner clearly agrees. A "yes" said while you are still reading back counts: call confirm_draft, do not read it again. If they correct anything, draft again with the correction. If they say "no" or "wait" without a correction, keep the draft and ask what to change. Use cancel_draft only when they say cancel, forget it, or leave it.
 6. If a tool returns an error, ask the owner only for the missing piece, in one short question.
 7. "How much does X owe" or similar: call check_account.
+10. "Undo", "remove that", "that was wrong" about something already saved: call undo_last.
+11. If a price sounds odd, the tool will say so. Ask the owner to say the price again; only if they repeat the same price, draft again with price_confirmed true.
 8. Money is naira. "3k" means 3000. "Two-five" after a thousand amount usually means 2,500; if unsure, ask.
 9. One short sentence per reply. You are talking to a busy person at a counter.`;
 }
@@ -35,7 +37,8 @@ const TOOLS = [
         unit_price: { type: "number", description: "Naira per unit ONLY if the owner said a price, e.g. 3000. Leave out otherwise." } },
         required: ["product", "quantity"] } },
       amount_paid: { type: "number", description: "Naira the customer paid now, only if said. Leave out if nothing was said about payment." },
-      add_new_customer: { type: "boolean", description: "True only after the owner confirmed this is a new customer." } },
+      add_new_customer: { type: "boolean", description: "True only after the owner confirmed this is a new customer." },
+      price_confirmed: { type: "boolean", description: "True only after the tool said a price looked wrong and the owner repeated the same price." } },
       required: ["customer", "items"] } },
   { type: "function", name: "draft_payment",
     description: "Prepare a payment a customer made, so the owner can confirm it. Returns the exact sentence to read back, including what they will still owe or any deposit. Does not save.",
@@ -49,6 +52,9 @@ const TOOLS = [
     parameters: { type: "object", properties: {} } },
   { type: "function", name: "cancel_draft",
     description: "Throw away the sale or payment that was read back, when the owner says no or cancel.",
+    parameters: { type: "object", properties: {} } },
+  { type: "function", name: "undo_last",
+    description: "Take the most recently saved sale or payment back out of the books, when the owner says undo or that it was wrong. Returns the sentence to say.",
     parameters: { type: "object", properties: {} } },
   { type: "function", name: "check_account",
     description: "Look up what a customer owes, or how much deposit the shop is holding for them. Returns the sentence to say.",
@@ -79,7 +85,7 @@ export class ShopAgent {
         transcription_prompt: `A Nigerian shop owner speaking English records sales and payments: quantities, products such as ${st.products.slice(0, 6).map(p => p.say).join(", ")}, prices in naira, and customer names such as ${st.customers.slice(0, 6).map(c => c.name).join(", ")}.`,
         language_codes: ["en"],
       },
-      output: { voice: "anna" },
+      output: { voice: "jean" },
     };
   }
 
@@ -216,6 +222,7 @@ export class ShopAgent {
       this.draft = null; this.on.draft(null);
       return { ok: true, say: "Cancelled, nothing saved." };
     }
+    if (name === "undo_last") return this.undo();
     if (name === "check_account") {
       const m = bestMatch(st.customers, args.customer, ["name"]);
       if (!m.match) return { ok: false, error: m.candidates ? `Unclear, close names: ${m.candidates.map(c => c.name).join(", ")}. Ask which.` : `No customer called '${args.customer}'.` };
@@ -236,6 +243,14 @@ export class ShopAgent {
     // A new customer's name joins the words AssemblyAI listens for, at once.
     if (hadNew) this.send({ type: "session.update", session: { input: { keyterms: shopKeyterms(this.store.state) } } });
     return say;
+  }
+
+  undo(ref) {
+    const r = undo(this.store.state, ref);
+    if (!r.ok) return { ok: false, error: r.error };
+    this.store.save();
+    this.on.saved(r.receipt);
+    return { ok: true, say: r.say };
   }
 
   // The Confirm button on screen does the same save, then has the agent say it.

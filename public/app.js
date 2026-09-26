@@ -171,7 +171,15 @@ function showReceiptFromHash() {
   } else body += `<tr><td>Payment from ${esc(r.customer)}</td><td class="n">${naira(r.paid)}</td></tr>`;
   body += `</table>`;
   if (r.customer) body += `<div>${esc(r.customer)}: ${amt(r.after)} after this.</div>`;
+  body += `<p><button type="button" class="ghost small" id="undoBtn">Undo this, it was a mistake</button></p>`;
   $("#receiptBody").innerHTML = body;
+  let armedUndo = false;
+  $("#undoBtn").onclick = () => {
+    if (!armedUndo) { armedUndo = true; $("#undoBtn").textContent = "Tap again to remove it from the books"; return; }
+    const res = agent.undo(r.ref);
+    if (res.ok && agent.ready) agent.send({ type: "conversation.message", role: "system", content: `The owner undid receipt ${r.ref} on screen. ${res.say}` });
+    $("#receiptDlg").close();
+  };
   if (!$("#receiptDlg").open) $("#receiptDlg").showModal();
 }
 window.addEventListener("hashchange", showReceiptFromHash);

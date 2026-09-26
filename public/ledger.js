@@ -170,6 +170,12 @@ export function draftSale(state, args) {
       unit = product.price;
     }
     if (!(unit > 0)) { errs.push(`price for '${it.product}' is missing`); continue; }
+    // A price nothing like the shop's usual one is far more likely a
+    // mishearing ("seventeen" for "seventeen thousand") than a real sale.
+    if (!args.price_confirmed && it.unit_price != null) {
+      const odd = product ? (unit < product.price / 4 || unit > product.price * 4) : unit < 50;
+      if (odd) { errs.push(`the price ${spoken(unit)} for '${it.product}' looks wrong${product ? ` (usual price ${spoken(product.price)})` : ""}; ask the owner to say the price again, then call again with price_confirmed true if they repeat it`); continue; }
+    }
     lines.push({
       product: product ? product.name : titleCase(it.product),
       say: product ? countOf(qty, product.unit, product.say) : `${qty} ${it.product}`,
@@ -188,7 +194,7 @@ export function draftSale(state, args) {
 
   const before = customer ? balanceOf(customer).balance : 0;
   const after = round2(before + total - paid);
-  const list = lines.map(l => `${l.say} at ${spoken(l.unit_price)}`).join(", ");
+  const list = lines.map(l => `${l.say} at ${inWords(l.unit_price)}`).join(", ");
   let say = `${list}. Total ${spoken(total)}.`;
   if (customer) {
     if (paid > 0) say += ` Paid ${spoken(paid)}.`;
@@ -196,7 +202,7 @@ export function draftSale(state, args) {
     say += ` ${cap(futureStandingText(customer.name, after))}.`;
     if (isNew) say += ` ${customer.name} is a new customer.`;
   } else say += " Paid in cash.";
-  say += " Say yes to save.";
+  say += " Say yes.";
 
   const warn = lines.filter(l => l.inStock).map(l => {
     const p = state.products.find(x => x.name === l.product);
@@ -221,9 +227,8 @@ export function draftPayment(state, args) {
   const before = balanceOf(customer).balance;
   const after = round2(before - amount);
   let say = `${customer.name} pays ${spoken(amount)}. `;
-  if (before > 0) say += `They owed ${spoken(before)}. `;
-  if (after < 0 && before > 0) say += `That is ${spoken(-after)} more than they owed. `;
-  say += `${cap(futureStandingText(customer.name, after))}. Say yes to save.`;
+  if (after < 0 && before > 0) say += `That is more than they owed. `;
+  say += `${cap(futureStandingText(customer.name, after))}. Say yes.`;
   return { ok: true, draft: { kind: "payment", customer: customer.name, isNew, amount, before, after, say } };
 }
 
@@ -243,7 +248,7 @@ export function commit(state, draft, now = new Date()) {
       if (p) p.stock = Math.max(0, p.stock - l.quantity);
     }
     if (customer) {
-      const note = draft.lines.map(l => `${l.quantity} ${l.say}`).join(", ");
+      const note = draft.lines.map(l => l.say).join(", ");
       customer.entries.push({ type: "debt", amount: draft.total, note, ts, ref });
       if (draft.paid > 0) customer.entries.push({ type: "payment", amount: draft.paid, note: "Paid at sale", ts, ref });
     }
@@ -256,6 +261,23 @@ export function commit(state, draft, now = new Date()) {
   state.receipts.unshift(receipt);
   const say = `Saved. Receipt ${ref.split("-").pop()}. ${customer ? cap(standingText(customer.name, after)) + "." : ""}`;
   return { receipt, say };
+}
+
+// Takes a saved receipt back out of the books: its account entries go and
+// sold stock returns to the shelf.
+export function undo(state, ref) {
+  const i = ref ? state.receipts.findIndex(r => r.ref === ref) : 0;
+  const r = state.receipts[i];
+  if (!r) return { ok: false, error: "There is nothing saved to undo." };
+  if (r.kind === "sale") for (const l of r.lines) {
+    const p = state.products.find(x => x.name === l.product);
+    if (p) p.stock += l.quantity;
+  }
+  const c = r.customer ? state.customers.find(x => x.name === r.customer) : null;
+  if (c) c.entries = c.entries.filter(e => e.ref !== r.ref);
+  state.receipts.splice(i, 1);
+  const what = r.kind === "sale" ? `the ${spoken(r.total)} sale` : `the ${spoken(r.paid)} payment`;
+  return { ok: true, receipt: r, say: `Undone. ${cap(what)}${r.customer ? ` for ${r.customer}` : ""} is removed.${c ? " " + cap(standingText(c.name, balanceOf(c).balance)) + "." : ""}` };
 }
 
 // The words AssemblyAI should listen hardest for: this shop's own customers

@@ -3,11 +3,17 @@
 Talk to your shop's record book. Say the sale, hear it read back, say yes.
 
 > "Two bags of rice, three thousand each, to Musa."
-> **PriceKeeper:** "2 bags of rice at 3,000 naira. Total 6,000 naira. Musa will owe 10,000 naira. Say yes to save."
+> **PriceKeeper:** "2 bags of rice at three thousand. Total six thousand naira. Musa will owe ten thousand naira. Say yes."
 > "Yes."
-> **PriceKeeper:** "Saved. Receipt zero zero one. Musa owes 10,000 naira."
+> **PriceKeeper:** "Saved. Receipt zero zero one. Musa owes ten thousand naira."
 
-Built for small shops in Nigeria, where the owner is serving a customer with both hands and keeping credit accounts in their head or a notebook. It is the voice layer for [PriceKeeper](#about-pricekeeper), a shop ledger already used by a real shop.
+## Why I built this
+
+I run a business in a market, mostly on my own. When it's busy I'm serving one customer, pricing for the next, and trying to remember who took goods on credit and who has paid. Stopping to type every sale into a phone slows the queue down, and hiring someone just to keep the books costs money a small trader doesn't have.
+
+So I wanted to keep my hands free and just say it. I say the sale out loud, it reads it back, I say yes, and it's in the book. I don't pay for an extra person, and my customers don't stand around waiting while I write.
+
+This is the voice layer for [PriceKeeper](#about-pricekeeper), the record book I already use for my own business.
 
 ## Why AssemblyAI is the core, not an add-on
 
@@ -34,7 +40,7 @@ A wrong number in a customer's credit account is worse than no app at all. So:
 3. Nothing is written until the owner says yes. `confirm_draft` checks **the owner's own last words** (from AssemblyAI's transcript), not the model's opinion of them. "No, wait" or silence cannot save anything.
 4. Names are matched against the shop's customer list. A close mishearing ("Oluwaseyun") finds "Oluwaseun"; a name that is not there is never invented without the owner saying it is a new customer.
 
-We found why rule 2 matters while building: in an early test the tool returned "total 6,000, new balance 10,000" and the agent said "Musa owes six thousand". With the code writing the sentence, it now reads back exactly what was computed.
+We found why this matters while building. In an early test the tool returned "total 6,000, new balance 10,000" and the agent said "Musa owes six thousand". In another, a misheard price put a 17 naira sale of rice on an account. Now the code writes every sentence with a number in it, a price nothing like the usual one is questioned before it can be saved, and "undo that" takes the last save back out.
 
 ## Try it
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords } from "../public/ledger.js";
+import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo } from "../public/ledger.js";
 
 const bal = (s, name) => balanceOf(s.customers.find(c => c.name === name)).balance;
 
@@ -11,7 +11,7 @@ test("the Musa sale: 2 rice at 3,000 on his account", () => {
   assert.equal(r.draft.total, 6000);
   assert.equal(r.draft.before, 4000);
   assert.equal(r.draft.after, 10000);
-  assert.equal(r.draft.say, "2 bags of rice at three thousand naira. Total six thousand naira. Musa will owe ten thousand naira. Say yes to save.");
+  assert.equal(r.draft.say, "2 bags of rice at three thousand. Total six thousand naira. Musa will owe ten thousand naira. Say yes.");
   assert.equal(bal(s, "Musa"), 4000, "a draft must not touch the books");
   const c = commit(s, r.draft, new Date("2026-09-26T09:00:00Z"));
   assert.equal(bal(s, "Musa"), 10000);
@@ -36,7 +36,7 @@ test("overpayment becomes a deposit", () => {
   const s = freshState();
   const r = draftPayment(s, { customer: "Musa", amount: 7000 });
   assert.equal(r.draft.after, -3000);
-  assert.match(r.draft.say, /three thousand naira more than they owed/);
+  assert.match(r.draft.say, /more than they owed/);
   assert.match(r.draft.say, /holding three thousand naira for Musa/);
 });
 
@@ -108,4 +108,31 @@ test("amounts are spoken in words, so the voice cannot read digits one by one", 
   assert.equal(inWords(1050), "one thousand and fifty");
   assert.equal(inWords(250000), "two hundred and fifty thousand");
   assert.equal(inWords(1500000), "one million five hundred thousand");
+});
+
+test("a price nothing like the usual one is questioned, not saved", () => {
+  const s = freshState();
+  const r = draftSale(s, { customer: "Emeka", items: [{ product: "rice", quantity: 1, unit_price: 17 }] });
+  assert.equal(r.ok, false);
+  assert.match(r.error, /looks wrong \(usual price three thousand naira\)/);
+  const r2 = draftSale(s, { customer: "Emeka", items: [{ product: "rice", quantity: 1, unit_price: 17 }], price_confirmed: true });
+  assert.ok(r2.ok, "owner repeated it, so it is allowed");
+  const r3 = draftSale(s, { customer: "Aisha", items: [{ product: "matches", quantity: 1, unit_price: 72 }] });
+  assert.ok(r3.ok, "72 naira is a normal price for a small item not in the stock list");
+  const r4 = draftSale(s, { customer: "Aisha", items: [{ product: "rice", quantity: 1, unit_price: 2800 }] });
+  assert.ok(r4.ok, "a small discount is fine");
+});
+
+test("undo takes the last save back out, stock included", () => {
+  const s = freshState();
+  commit(s, draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: 2 }] }).draft);
+  commit(s, draftPayment(s, { customer: "Emeka", amount: 25000 }).draft);
+  assert.equal(bal(s, "Emeka"), 20000);
+  let r = undo(s);
+  assert.match(r.say, /Undone. The twenty-five thousand naira payment for Emeka is removed. Emeka owes forty-five thousand naira./);
+  assert.equal(bal(s, "Emeka"), 45000);
+  r = undo(s);
+  assert.equal(bal(s, "Musa"), 4000);
+  assert.equal(s.products.find(p => p.say === "rice").stock, 40);
+  assert.equal(undo(s).ok, false);
 });
