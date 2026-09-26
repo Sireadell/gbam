@@ -1,4 +1,4 @@
-// Netlify version of the token route in server.js: mints a single-use
+// Netlify version of the token route in dev-server.js: mints a single-use
 // AssemblyAI Voice Agent token so the API key never reaches the browser.
 // Set ASSEMBLYAI_API_KEY in the Netlify site's environment variables.
 const MAX_SESSION_SECONDS = Number(process.env.MAX_SESSION_SECONDS) || 600;

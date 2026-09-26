@@ -52,7 +52,7 @@ Needs Node 20+ and an AssemblyAI API key. No other dependencies.
 
 ```bash
 cp .env.example .env        # put your key in it
-npm start                   # http://localhost:5178
+npm run dev                 # http://localhost:5178
 npm test                    # ledger maths tests
 ```
 
@@ -74,7 +74,7 @@ Deep links: `/#receipt=GB-0926-001` opens a saved receipt, so it can be sent to 
 
 | File | What it is |
 |---|---|
-| `server.js`, `api/voice-token.js` | Serves the page (locally; on Vercel only the token route runs as a function) and mints single-use AssemblyAI tokens. The API key never reaches the browser. Sessions are capped (10 minutes) and rate limited per visitor. |
+| `dev-server.js`, `api/voice-token.js` | Serves the page (locally; on Vercel only the token route runs as a function) and mints single-use AssemblyAI tokens. The API key never reaches the browser. Sessions are capped (10 minutes) and rate limited per visitor. |
 | `public/agent.js` | The Voice Agent session: config, key terms, tools, audio in and out |
 | `public/ledger.js` | The books: matching, maths, drafts, saving, the read-back sentences |
 | `public/app.js` | The screen |
