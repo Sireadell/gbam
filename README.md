@@ -1,19 +1,23 @@
 # Gbam
 
-Talk to your shop's record book. Say the sale, hear it read back, say yes.
+Say the sale. Gbam records it.
+
+*Gbam* is Nigerian slang for "exactly, done".
 
 > "Two bags of rice, three thousand each, to Musa."
 > **Gbam:** "2 bags of rice at three thousand. Total six thousand naira. Musa will owe ten thousand naira. Say yes."
 > "Yes."
-> **Gbam:** "Saved. Receipt zero zero one. Musa owes ten thousand naira."
+> **Gbam:** "Saved, receipt one. Musa owes ten thousand naira."
 
 ## Why I built this
 
-I run a business in a market, mostly on my own. When it's busy I'm serving one customer, pricing for the next, and trying to remember who took goods on credit and who has paid. Stopping to type every sale into a phone slows the queue down, and hiring someone just to keep the books costs money a small trader doesn't have.
+I built Gbam because I run a business in a Nigerian market and know what happens when you're serving customers, pricing goods and trying to remember credit at the same time.
 
-So I wanted to keep my hands free and just say it. I say the sale out loud, it reads it back, I say yes, and it's in the book. I don't pay for an extra person, and my customers don't stand around waiting while I write.
+Typing every sale into a phone slows me down. Keeping a notebook doesn't calculate balances for me. Hiring someone to handle records adds a cost I don't need.
 
-This is the voice layer for [PriceKeeper](#about-pricekeeper), the record book I already use for my own business.
+I wanted to speak a sale naturally and have the record come back to me before it was saved. That's how Gbam started.
+
+I built it for myself first, as the voice layer for [PriceKeeper](#about-pricekeeper), the record book I already run my business on: over ₦8.8 million of sales recorded in it in 5 months.
 
 ## Why AssemblyAI is the core, not an add-on
 
