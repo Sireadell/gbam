@@ -259,7 +259,7 @@ export function commit(state, draft, now = new Date()) {
   const receipt = { ref, ts, kind: draft.kind, customer: draft.customer, lines: draft.lines || null,
     total: draft.total ?? null, paid: draft.kind === "sale" ? draft.paid : draft.amount, before: draft.before, after };
   state.receipts.unshift(receipt);
-  const say = `Saved. Receipt ${ref.split("-").pop()}. ${customer ? cap(standingText(customer.name, after)) + "." : ""}`;
+  const say = `Saved, receipt ${inWords(state.seq)}.${customer ? cap(standingText(customer.name, after)) + "." : ""}`;
   return { receipt, say };
 }
 
@@ -278,6 +278,32 @@ export function undo(state, ref) {
   state.receipts.splice(i, 1);
   const what = r.kind === "sale" ? `the ${spoken(r.total)} sale` : `the ${spoken(r.paid)} payment`;
   return { ok: true, receipt: r, say: `Undone. ${cap(what)}${r.customer ? ` for ${r.customer}` : ""} is removed.${c ? " " + cap(standingText(c.name, balanceOf(c).balance)) + "." : ""}` };
+}
+
+// "How much I make today?" Sales, the cash that actually came in, and what
+// went out on credit, from today's receipts only.
+export function todaySummary(state, now = new Date()) {
+  const day = now.toISOString().slice(0, 10);
+  const today = state.receipts.filter(r => r.ts.slice(0, 10) === day);
+  const sales = today.filter(r => r.kind === "sale");
+  const sold = round2(sales.reduce((s, r) => s + r.total, 0));
+  const cash = round2(today.reduce((s, r) => s + (r.paid || 0), 0));
+  const credit = round2(sales.filter(r => r.customer).reduce((s, r) => s + Math.max(0, r.total - r.paid), 0));
+  if (!today.length) return { sales: 0, sold: 0, cash: 0, credit: 0, say: "Nothing recorded today yet." };
+  let say = `Today: ${sales.length} ${sales.length === 1 ? "sale" : "sales"}, ${spoken(sold)}. Cash in, ${spoken(cash)}.`;
+  if (credit > 0) say += ` On credit, ${spoken(credit)}.`;
+  return { sales: sales.length, sold, cash, credit, say };
+}
+
+// "Remind Emeka": a polite message the owner sends from their own WhatsApp.
+// Nothing is sent by the app itself.
+export function reminder(state, heard) {
+  const m = bestMatch(state.customers, heard, ["name"]);
+  if (!m.match) return fail(m.candidates ? `Unclear, close names: ${m.candidates.map(c => c.name).join(", ")}. Ask which.` : `No customer called '${heard}'.`);
+  const c = m.match, b = balanceOf(c).balance;
+  if (b <= 0) return { ok: true, customer: c.name, text: null, say: `${c.name} owes nothing, so there is nothing to remind.` };
+  const text = `Hello ${c.name}, this is ${state.shop.name}. Your balance with us is ${naira(b)}. Thank you for your custom.`;
+  return { ok: true, customer: c.name, text, say: `The reminder for ${c.name} is ready on your screen. ${c.name} owes ${spoken(b)}. Tap send on WhatsApp.` };
 }
 
 // The words AssemblyAI should listen hardest for: this shop's own customers

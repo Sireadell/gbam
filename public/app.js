@@ -1,4 +1,4 @@
-import { freshState, balanceOf, naira, shopKeyterms } from "./ledger.js";
+import { freshState, balanceOf, naira, shopKeyterms, reminder } from "./ledger.js";
 import { ShopAgent } from "./agent.js";
 
 const KEY = "pkv-shop-v1";
@@ -20,6 +20,9 @@ const TRIES = [
   "How much does Emeka owe?",
   "Sell one carton of Indomie to Aisha, she paid five thousand",
   "Musa paid seven thousand",
+  "How much I make today?",
+  "Remind Emeka",
+  "Chinedu don pay 5k",
 ];
 
 let partialYou = null, partialAgent = null;
@@ -36,6 +39,7 @@ const agent = new ShopAgent({
     saved: r => { renderAll(); if (r.customer) flash(r.customer); },
     focus: name => flash(name),
     tool: logTool,
+    reminder: (name, text) => showReminder(name, text),
     ended: reason => setLive(false, reason),
   },
 });
@@ -152,9 +156,19 @@ function showCustomer(name) {
   if (!c) return;
   const b = balanceOf(c).balance;
   const rows = c.entries.slice().reverse().map(e => `<tr><td>${new Date(e.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · ${esc(e.note || "")}${e.ref ? ` <span class="ref">${e.ref}</span>` : ""}</td><td class="n">${e.type === "debt" ? "+" : "−"}${naira(e.amount)}</td></tr>`).join("");
-  $("#custBody").innerHTML = `<h3>${esc(c.name)}</h3><div>${amt(b)}</div><table>${rows || "<tr><td>No entries yet</td></tr>"}</table><div class="hint">+ took goods on credit, − paid</div>`;
+  $("#custBody").innerHTML = `<h3>${esc(c.name)}</h3><div>${amt(b)}</div><table>${rows || "<tr><td>No entries yet</td></tr>"}</table><div class="hint">+ took goods on credit, − paid</div>` +
+    (b > 0 ? `<p><button type="button" class="ghost small" id="custRemind">Remind ${esc(c.name)} on WhatsApp</button></p>` : "");
+  if (b > 0) $("#custRemind").onclick = () => { const r = reminder(store.state, c.name); showReminder(r.customer, r.text); $("#custDlg").close(); };
   $("#custDlg").showModal();
 }
+
+// The owner sends it from their own WhatsApp; the app never sends anything.
+function showReminder(name, text) {
+  $("#remindText").textContent = text;
+  $("#remindSend").href = "https://wa.me/?text=" + encodeURIComponent(text);
+  $("#remind").hidden = false;
+}
+$("#remindClose").onclick = () => { $("#remind").hidden = true; };
 
 // Receipts have their own link, so a customer can be sent one.
 function showReceiptFromHash() {

@@ -111,3 +111,8 @@ dialog td.n { text-align: right; font-variant-numeric: tabular-nums; }
 dialog form { margin-top: 12px; text-align: right; }
 
 .real { max-width: 1120px; margin: 0 auto; padding: 8px 16px 32px; color: var(--muted); font-size: 13px; }
+
+.remind { border: 2px solid var(--green); background: var(--green-soft); border-radius: 12px; padding: 12px 14px; }
+.remind .draft-title { color: var(--green); }
+.remind p { margin: 4px 0 0; }
+a.primary { text-decoration: none; display: inline-block; }

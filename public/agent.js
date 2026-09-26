@@ -3,14 +3,14 @@
 // for, and the tools it must use to touch the books. The books never trust
 // the model with a number: tools compute everything and return the sentence
 // to read back.
-import { draftSale, draftPayment, commit, undo, balanceOf, bestMatch, standingText, shopKeyterms } from "./ledger.js";
+import { draftSale, draftPayment, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms } from "./ledger.js";
 
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
-const YES = /\b(gbam|yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct)\b/i;
-const NO = /\b(no|not|don'?t|wrong|cancel|wait|stop|change)\b/i;
+const YES = /\b(gbam|yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct|oya|save am)\b/i;
+const NO = /\b(no|not|don'?t|wrong|cancel|wait|stop|change|no be so)\b/i;
 
 function systemPrompt(shop) {
-  return `You are Gbam, the voice record book of ${shop.name}, a provisions shop in ${shop.city}, Nigeria. The owner talks to you in English, often Nigerian English, while serving customers. You turn what they say into sale and payment records.
+  return `You are Gbam, the voice record book of ${shop.name}, a provisions shop in ${shop.city}, Nigeria. The owner talks to you in Nigerian English or Nigerian Pidgin while serving customers. Understand Pidgin: "don pay" or "pay me" means paid, "carry" or "collect" or "take" means took goods, "e don finish" means sold out, "wetin X owe" means how much does X owe, "abeg" means please, "oya" means go ahead. Reply in plain simple English. You turn what they say into sale and payment records.
 
 Rules:
 1. Never do arithmetic. Never say a price, total or balance from your own head. Every number you speak must come from a tool result.
@@ -20,10 +20,13 @@ Rules:
 5. Save only with confirm_draft, and only right after the owner clearly agrees. A "yes" said while you are still reading back counts: call confirm_draft, do not read it again. If they correct anything, draft again with the correction. If they say "no" or "wait" without a correction, keep the draft and ask what to change. Use cancel_draft only when they say cancel, forget it, or leave it.
 6. If a tool returns an error, ask the owner only for the missing piece, in one short question.
 7. "How much does X owe" or similar: call check_account.
-10. "Undo", "remove that", "that was wrong" about something already saved: call undo_last.
+8. "Undo", "remove that", "that was wrong" about something already saved: call undo_last.
+9. "How much I make today", "today's sales" or similar: call today_summary.
+10. "Remind X", "send X reminder", "tell X to pay": call remind_customer.
 11. If a price sounds odd, the tool will say so. Ask the owner to say the price again; only if they repeat the same price, draft again with price_confirmed true.
-8. Money is naira. "3k" means 3000. "Two-five" after a thousand amount usually means 2,500; if unsure, ask.
-9. One short sentence per reply. You are talking to a busy person at a counter.`;
+12. Money is naira. "3k" or "3 thousand" means 3000. "Two-five" after a thousand amount usually means 2,500; if unsure, ask.
+13. "Gbam" means yes, exactly.
+14. One short sentence per reply. You are talking to a busy person at a counter.`;
 }
 
 const TOOLS = [
@@ -56,6 +59,12 @@ const TOOLS = [
   { type: "function", name: "undo_last",
     description: "Take the most recently saved sale or payment back out of the books, when the owner says undo or that it was wrong. Returns the sentence to say.",
     parameters: { type: "object", properties: {} } },
+  { type: "function", name: "today_summary",
+    description: "Today's totals: number of sales, money sold, cash that came in, and how much went out on credit. Returns the sentence to say.",
+    parameters: { type: "object", properties: {} } },
+  { type: "function", name: "remind_customer",
+    description: "Prepare a polite WhatsApp reminder to a customer about what they owe. It is shown on screen for the owner to send; nothing is sent automatically. Returns the sentence to say.",
+    parameters: { type: "object", properties: { customer: { type: "string", description: "Customer's name as said, e.g. 'Emeka'." } }, required: ["customer"] } },
   { type: "function", name: "check_account",
     description: "Look up what a customer owes, or how much deposit the shop is holding for them. Returns the sentence to say.",
     parameters: { type: "object", properties: {
@@ -82,7 +91,7 @@ export class ShopAgent {
       tools: TOOLS,
       input: {
         keyterms: shopKeyterms(st),
-        transcription_prompt: `A Nigerian shop owner speaking English records sales and payments: quantities, products such as ${st.products.slice(0, 6).map(p => p.say).join(", ")}, prices in naira, and customer names such as ${st.customers.slice(0, 6).map(c => c.name).join(", ")}.`,
+        transcription_prompt: `A Nigerian shop owner speaking Nigerian English or Pidgin (for example "don pay", "abeg", "5k", "na so", "gbam") records sales and payments: quantities, products such as ${st.products.slice(0, 6).map(p => p.say).join(", ")}, prices in naira, and customer names such as ${st.customers.slice(0, 6).map(c => c.name).join(", ")}.`,
         language_codes: ["en"],
       },
       output: { voice: "jean" },
@@ -238,6 +247,13 @@ export class ShopAgent {
       return { ok: true, say: "Cancelled, nothing saved." };
     }
     if (name === "undo_last") return this.undo();
+    if (name === "today_summary") return { ok: true, say: todaySummary(st).say };
+    if (name === "remind_customer") {
+      const r = reminder(st, args.customer);
+      if (!r.ok) return { ok: false, error: r.error };
+      if (r.text) this.on.reminder(r.customer, r.text);
+      return { ok: true, say: r.say };
+    }
     if (name === "check_account") {
       const m = bestMatch(st.customers, args.customer, ["name"]);
       if (!m.match) return { ok: false, error: m.candidates ? `Unclear, close names: ${m.candidates.map(c => c.name).join(", ")}. Ask which.` : `No customer called '${args.customer}'.` };

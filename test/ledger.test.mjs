@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo } from "../public/ledger.js";
+import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo, todaySummary, reminder } from "../public/ledger.js";
 
 const bal = (s, name) => balanceOf(s.customers.find(c => c.name === name)).balance;
 
@@ -135,4 +135,24 @@ test("undo takes the last save back out, stock included", () => {
   assert.equal(bal(s, "Musa"), 4000);
   assert.equal(s.products.find(p => p.say === "rice").stock, 40);
   assert.equal(undo(s).ok, false);
+});
+
+test("today's summary counts only today's receipts", () => {
+  const s = freshState();
+  assert.equal(todaySummary(s, new Date("2026-09-26T12:00:00Z")).say, "Nothing recorded today yet.");
+  commit(s, draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: 2 }] }).draft, new Date("2026-09-26T09:00:00Z"));
+  commit(s, draftSale(s, { customer: "", items: [{ product: "sugar", quantity: 2 }] }).draft, new Date("2026-09-26T10:00:00Z"));
+  commit(s, draftPayment(s, { customer: "Emeka", amount: 20000 }).draft, new Date("2026-09-26T11:00:00Z"));
+  commit(s, draftSale(s, { customer: "Aisha", items: [{ product: "rice", quantity: 1 }] }).draft, new Date("2026-09-25T11:00:00Z"));
+  const t = todaySummary(s, new Date("2026-09-26T18:00:00Z"));
+  assert.deepEqual([t.sales, t.sold, t.cash, t.credit], [2, 9000, 23000, 6000]);
+  assert.equal(t.say, "Today: 2 sales, nine thousand naira. Cash in, twenty-three thousand naira. On credit, six thousand naira.");
+});
+
+test("reminder is written for what the customer really owes", () => {
+  const s = freshState();
+  const r = reminder(s, "emeka");
+  assert.equal(r.text, "Hello Emeka, this is Mama Bisi Provisions. Your balance with us is ₦45,000. Thank you for your custom.");
+  assert.equal(reminder(s, "Aisha").text, null);
+  assert.equal(reminder(s, "Bola").ok, false);
 });
