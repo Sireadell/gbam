@@ -58,6 +58,8 @@ npm test                    # ledger maths tests
 
 Tap the microphone and talk. No microphone? Tap start anyway and type, or tap one of the sample sentences: the agent still answers out loud.
 
+Deploy: on Vercel, import the repo and set `ASSEMBLYAI_API_KEY` (the token route is `api/voice-token.js`). Netlify also works (`netlify/functions/voice-token.mjs`).
+
 Deep links: `/#receipt=GB-0926-001` opens a saved receipt, so it can be sent to a customer.
 
 ## What is real and what is sample
@@ -72,7 +74,7 @@ Deep links: `/#receipt=GB-0926-001` opens a saved receipt, so it can be sent to 
 
 | File | What it is |
 |---|---|
-| `server.js` | Serves the page and mints single-use AssemblyAI tokens. The API key never reaches the browser. Sessions are capped (10 minutes) and rate limited per visitor. |
+| `server.js`, `api/voice-token.js` | Serves the page (locally; on Vercel only the token route runs as a function) and mints single-use AssemblyAI tokens. The API key never reaches the browser. Sessions are capped (10 minutes) and rate limited per visitor. |
 | `public/agent.js` | The Voice Agent session: config, key terms, tools, audio in and out |
 | `public/ledger.js` | The books: matching, maths, drafts, saving, the read-back sentences |
 | `public/app.js` | The screen |
