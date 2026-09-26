@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gbam proof</title>
+<meta name="description" content="The same voice, heard twice by AssemblyAI: once plain, once with the shop's own words.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231f5f3f'/><text x='16' y='22' font-size='15' font-family='Arial' font-weight='700' fill='white' text-anchor='middle'>G</text></svg>">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 32px; display: grid; gap: 16px; }
+  .intro p { margin: 6px 0; color: var(--muted); }
+  .intro h1 { font-size: 26px; margin: 0 0 6px; }
+  .pick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pick button { font-size: 14px; border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 99px; padding: 7px 12px; }
+  .pick button.on { background: var(--green); border-color: var(--green); color: #fff; }
+  .say { font-size: 22px; font-weight: 700; margin: 4px 0 0; }
+  .row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .cols { grid-template-columns: 1fr; } }
+  .col h2 { margin-bottom: 4px; }
+  .col .sub { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .heard { font-size: 20px; min-height: 64px; line-height: 1.4; }
+  .heard mark { background: var(--green-soft); color: var(--green); padding: 0 3px; border-radius: 4px; }
+  .score { margin-top: 10px; font-weight: 700; }
+  .col.with { border-color: var(--green); }
+  .verdict { font-size: 18px; font-weight: 700; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark">G</span><div><strong>Gbam proof</strong><span class="shop">What AssemblyAI's key terms change</span></div></div>
+  <a class="ghost small" href="/" style="text-decoration:none">Back to Gbam</a>
+</header>
+
+<main class="wrap">
+  <section class="card intro">
+    <h1>The same voice, heard twice</h1>
+    <p>When you tap the microphone, your voice goes to AssemblyAI's Universal-3.5 Pro twice at the same moment. The left copy hears it plain. The right copy also gets Gbam's key terms: this shop's own customer names and products, taken from its ledger.</p>
+    <p>Pick a sentence, tap the microphone, say it, then tap again to stop.</p>
+    <div class="pick" id="pick"></div>
+    <p class="say" id="say"></p>
+    <div class="row">
+      <button id="mic" class="mic" aria-label="Start recording"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg></button>
+      <div><div id="label" class="mic-label">Tap to record</div><div id="status" class="status">Needs a microphone. Works best in Chrome.</div></div>
+    </div>
+  </section>
+
+  <section class="cols">
+    <div class="card col">
+      <h2>Plain</h2>
+      <p class="sub">Universal-3.5 Pro, no hints</p>
+      <div class="heard" id="plain"></div>
+      <div class="score" id="plainScore"></div>
+    </div>
+    <div class="card col with">
+      <h2>With Gbam's key terms</h2>
+      <p class="sub">Same model, plus <span id="count"></span> shop words and a one-line shop description</p>
+      <div class="heard" id="with"></div>
+      <div class="score" id="withScore"></div>
+    </div>
+  </section>
+  <section class="card"><div class="verdict" id="verdict">Your result will show here.</div>
+    <p class="hint" style="margin:8px 0 0">Nothing you say here is saved. Each run uses two short AssemblyAI streaming sessions.</p></section>
+</main>
+
+<script type="module" src="/proof.js"></script>
+</body>
+</html>
