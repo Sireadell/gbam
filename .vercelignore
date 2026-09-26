@@ -1,0 +1,6 @@
+server.js
+netlify/
+netlify.toml
+test/
+logs/
+.env
