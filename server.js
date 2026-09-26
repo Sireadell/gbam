@@ -55,6 +55,18 @@ http.createServer(async (req, res) => {
       return send(res, t.status, "application/json", t.body);
     }
     if (url.pathname === "/healthz") return send(res, 200, "text/plain", "ok");
+    // Session log, only from this same computer (see trace() in agent.js).
+    if (url.pathname === "/api/log" && req.method === "POST") {
+      const local = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress) && !req.headers["x-forwarded-for"];
+      if (!local) return send(res, 403, "text/plain", "no");
+      let body = "";
+      for await (const c of req) { body += c; if (body.length > 2e6) break; }
+      fs.mkdirSync(path.join(ROOT, "logs"), { recursive: true });
+      const day = new Date().toISOString().slice(0, 10);
+      const lines = JSON.parse(body).map(e => JSON.stringify(e)).join("\n") + "\n";
+      fs.appendFileSync(path.join(ROOT, "logs", `${day}.jsonl`), lines);
+      return send(res, 204, "text/plain", "");
+    }
 
     let file = path.normalize(path.join(PUBLIC, url.pathname === "/" ? "index.html" : url.pathname));
     if (!file.startsWith(PUBLIC)) return send(res, 403, "text/plain", "no");

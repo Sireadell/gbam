@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms } from "../public/ledger.js";
+import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords } from "../public/ledger.js";
 
 const bal = (s, name) => balanceOf(s.customers.find(c => c.name === name)).balance;
 
@@ -11,7 +11,7 @@ test("the Musa sale: 2 rice at 3,000 on his account", () => {
   assert.equal(r.draft.total, 6000);
   assert.equal(r.draft.before, 4000);
   assert.equal(r.draft.after, 10000);
-  assert.equal(r.draft.say, "2 bags of rice at 3,000 naira. Total 6,000 naira. Musa will owe 10,000 naira. Say yes to save.");
+  assert.equal(r.draft.say, "2 bags of rice at three thousand naira. Total six thousand naira. Musa will owe ten thousand naira. Say yes to save.");
   assert.equal(bal(s, "Musa"), 4000, "a draft must not touch the books");
   const c = commit(s, r.draft, new Date("2026-09-26T09:00:00Z"));
   assert.equal(bal(s, "Musa"), 10000);
@@ -36,8 +36,8 @@ test("overpayment becomes a deposit", () => {
   const s = freshState();
   const r = draftPayment(s, { customer: "Musa", amount: 7000 });
   assert.equal(r.draft.after, -3000);
-  assert.match(r.draft.say, /3,000 naira more than they owed/);
-  assert.match(r.draft.say, /holding 3,000 naira for Musa/);
+  assert.match(r.draft.say, /three thousand naira more than they owed/);
+  assert.match(r.draft.say, /holding three thousand naira for Musa/);
 });
 
 test("a deposit is used up by the next sale", () => {
@@ -97,4 +97,15 @@ test("keyterms are this shop's names and products, within API limits", () => {
   const k = shopKeyterms(freshState());
   assert.ok(k.includes("Musa") && k.includes("Indomie") && k.includes("Mama Ngozi"));
   assert.ok(k.length <= 100 && k.every(t => t.length <= 50));
+});
+
+test("amounts are spoken in words, so the voice cannot read digits one by one", () => {
+  assert.equal(inWords(3000), "three thousand");
+  assert.equal(inWords(13000), "thirteen thousand");
+  assert.equal(inWords(8500), "eight thousand five hundred");
+  assert.equal(inWords(2200), "two thousand two hundred");
+  assert.equal(inWords(45000), "forty-five thousand");
+  assert.equal(inWords(1050), "one thousand and fifty");
+  assert.equal(inWords(250000), "two hundred and fifty thousand");
+  assert.equal(inWords(1500000), "one million five hundred thousand");
 });

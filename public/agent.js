@@ -127,7 +127,23 @@ export class ShopAgent {
     try { this.ws?.close(); } catch {}
   }
 
-  send(msg) { this.ws?.readyState === 1 && this.ws.send(JSON.stringify(msg)); }
+  send(msg) {
+    if (this.ws?.readyState !== 1) return;
+    if (msg.type !== "input.audio") this.trace("out", msg);
+    this.ws.send(JSON.stringify(msg));
+  }
+
+  // When running on your own computer, every event except raw audio is written
+  // to logs/ by the server, so a session that went wrong can be replayed.
+  trace(dir, m) {
+    if (typeof location === "undefined" || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) return;
+    (this.traceBuf ||= []).push({ t: Date.now(), dir, m });
+    this.traceTimer ||= setTimeout(() => {
+      const body = JSON.stringify(this.traceBuf);
+      this.traceBuf = []; this.traceTimer = null;
+      fetch("/api/log", { method: "POST", body, keepalive: true }).catch(() => {});
+    }, 1000);
+  }
 
   // Typed input, for noisy moments or a judge without a microphone.
   typed(text) {
@@ -141,6 +157,7 @@ export class ShopAgent {
   }
 
   handle(m) {
+    if (m.type !== "reply.audio" && m.type !== "transcript.agent.delta") this.trace("in", m);
     switch (m.type) {
       case "session.ready": this.ready = true; this.on.status(this.worklet ? "Listening" : "No microphone here. Type below, the agent still answers out loud."); this.on.ready(); break;
       case "input.speech.started": this.lastEvent = m.type; this.on.hearing(true); break;

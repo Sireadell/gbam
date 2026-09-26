@@ -51,9 +51,27 @@ export function naira(n) {
   return "₦" + Math.round(n).toLocaleString("en-US");
 }
 
-// Spoken form. Digits with commas are read correctly by the voice.
+// Spoken form, in words. Given digits the voice sometimes read "45000" as
+// "four five zero zero zero", so amounts are handed over already in words.
 export function spoken(n) {
-  return Math.round(n).toLocaleString("en-US") + " naira";
+  return inWords(Math.round(n)) + " naira";
+}
+
+const ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+
+export function inWords(n) {
+  if (n < 0) return "minus " + inWords(-n);
+  if (n < 20) return ONES[n];
+  if (n < 100) return TENS[Math.floor(n / 10)] + (n % 10 ? "-" + ONES[n % 10] : "");
+  if (n < 1000) return ONES[Math.floor(n / 100)] + " hundred" + (n % 100 ? " and " + inWords(n % 100) : "");
+  for (const [size, name] of [[1e9, "billion"], [1e6, "million"], [1e3, "thousand"]]) {
+    if (n >= size) {
+      const rest = n % size;
+      return inWords(Math.floor(n / size)) + " " + name + (rest ? (rest < 100 ? " and " : " ") + inWords(rest) : "");
+    }
+  }
 }
 
 export function balanceOf(customer) {
