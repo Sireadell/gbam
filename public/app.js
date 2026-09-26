@@ -31,7 +31,7 @@ const agent = new ShopAgent({
     ready: () => { setTyping(true); },
     hearing: on => $("#micBtn").classList.toggle("hearing", on),
     user: (text, final) => { partialYou = bubble("you", "You", text, final, partialYou); },
-    agent: (text, final) => { partialAgent = bubble("agent", "PriceKeeper", text, final, partialAgent); },
+    agent: (text, final) => { partialAgent = bubble("agent", "Gbam", text, final, partialAgent); },
     draft: renderDraft,
     saved: r => { renderAll(); if (r.customer) flash(r.customer); },
     focus: name => flash(name),

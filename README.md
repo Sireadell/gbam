@@ -1,11 +1,11 @@
-# PriceKeeper Voice
+# Gbam
 
 Talk to your shop's record book. Say the sale, hear it read back, say yes.
 
 > "Two bags of rice, three thousand each, to Musa."
-> **PriceKeeper:** "2 bags of rice at three thousand. Total six thousand naira. Musa will owe ten thousand naira. Say yes."
+> **Gbam:** "2 bags of rice at three thousand. Total six thousand naira. Musa will owe ten thousand naira. Say yes."
 > "Yes."
-> **PriceKeeper:** "Saved. Receipt zero zero one. Musa owes ten thousand naira."
+> **Gbam:** "Saved. Receipt zero zero one. Musa owes ten thousand naira."
 
 ## Why I built this
 
@@ -54,7 +54,7 @@ npm test                    # ledger maths tests
 
 Tap the microphone and talk. No microphone? Tap start anyway and type, or tap one of the sample sentences: the agent still answers out loud.
 
-Deep links: `/#receipt=PKV-0926-001` opens a saved receipt, so it can be sent to a customer.
+Deep links: `/#receipt=GB-0926-001` opens a saved receipt, so it can be sent to a customer.
 
 ## What is real and what is sample
 

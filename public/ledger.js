@@ -240,7 +240,7 @@ export function commit(state, draft, now = new Date()) {
     state.customers.push(customer);
   }
   state.seq += 1;
-  const ref = `PKV-${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(state.seq).padStart(3, "0")}`;
+  const ref = `GB-${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(state.seq).padStart(3, "0")}`;
   const ts = now.toISOString();
   if (draft.kind === "sale") {
     for (const l of draft.lines) {

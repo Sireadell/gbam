@@ -15,7 +15,7 @@ test("the Musa sale: 2 rice at 3,000 on his account", () => {
   assert.equal(bal(s, "Musa"), 4000, "a draft must not touch the books");
   const c = commit(s, r.draft, new Date("2026-09-26T09:00:00Z"));
   assert.equal(bal(s, "Musa"), 10000);
-  assert.equal(c.receipt.ref, "PKV-0926-001");
+  assert.equal(c.receipt.ref, "GB-0926-001");
   assert.equal(s.products.find(p => p.say === "rice").stock, 38);
 });
 

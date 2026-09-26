@@ -6,11 +6,11 @@
 import { draftSale, draftPayment, commit, undo, balanceOf, bestMatch, standingText, shopKeyterms } from "./ledger.js";
 
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
-const YES = /\b(yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct)\b/i;
+const YES = /\b(gbam|yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct)\b/i;
 const NO = /\b(no|not|don'?t|wrong|cancel|wait|stop|change)\b/i;
 
 function systemPrompt(shop) {
-  return `You are the voice of PriceKeeper, the record book of ${shop.name}, a provisions shop in ${shop.city}, Nigeria. The owner talks to you in English, often Nigerian English, while serving customers. You turn what they say into sale and payment records.
+  return `You are Gbam, the voice record book of ${shop.name}, a provisions shop in ${shop.city}, Nigeria. The owner talks to you in English, often Nigerian English, while serving customers. You turn what they say into sale and payment records.
 
 Rules:
 1. Never do arithmetic. Never say a price, total or balance from your own head. Every number you speak must come from a tool result.

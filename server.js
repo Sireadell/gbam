@@ -76,7 +76,7 @@ http.createServer(async (req, res) => {
     send(res, 500, "text/plain", "Server error");
     console.error(e);
   }
-}).listen(PORT, () => console.log(`PriceKeeper Voice on http://localhost:${PORT}`));
+}).listen(PORT, () => console.log(`Gbam on http://localhost:${PORT}`));
 
 function send(res, status, type, body) {
   res.writeHead(status, { "Content-Type": type, "Cache-Control": "no-store" });
