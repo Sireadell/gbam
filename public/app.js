@@ -1,4 +1,4 @@
-import { freshState, balanceOf, naira, shopKeyterms, reminder } from "./ledger.js";
+import { freshState, demoState, balanceOf, naira, shopKeyterms, reminder, summary, periodStart, debtors } from "./ledger.js";
 import { ShopAgent } from "./agent.js";
 
 const KEY = "pkv-shop-v1";
@@ -11,15 +11,19 @@ const store = {
 };
 function load() {
   try {
-    const s = JSON.parse(localStorage.getItem(KEY));
-    if (s?.customers) {
-      s.expenses ||= [];
-      const seed = freshState().products;
-      for (const p of s.products) if (p.cost == null) p.cost = seed.find(x => x.name === p.name)?.cost ?? null;
-      return s;
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s?.customers) {
+        s.expenses ||= [];
+        const seed = freshState().products;
+        for (const p of s.products) if (p.cost == null) p.cost = seed.find(x => x.name === p.name)?.cost ?? null;
+        if ((!s.receipts || !s.receipts.length) && !s.seeded) return demoState();
+        return s;
+      }
     }
   } catch {}
-  return freshState();
+  return demoState();
 }
 
 const TRIES = [
@@ -46,17 +50,76 @@ const agent = new ShopAgent({
   on: {
     status: t => { $("#status").textContent = t; },
     ready: () => { setTyping(true); },
-    hearing: on => $("#micBtn").classList.toggle("hearing", on),
+    hearing: on => { $("#micBtn").classList.toggle("hearing", on); $("#fabMic").classList.toggle("hearing", on); },
     user: (text, final) => { partialYou = bubble("you", "You", text, final, partialYou); },
     agent: (text, final) => { partialAgent = bubble("agent", "Gbam", text, final, partialAgent); },
-    draft: renderDraft,
+    draft: d => { renderDraft(d); if (d) bringTalk(); },
     saved: r => { renderAll(); if (r.customer) flash(r.customer); },
     focus: name => flash(name),
     tool: logTool,
-    reminder: (name, text) => showReminder(name, text),
+    reminder: (name, text) => { showReminder(name, text); bringTalk(); },
     ended: reason => setLive(false, reason),
   },
 });
+
+// ---------- tabs / routing ----------
+
+const TABS = ["talk", "dashboard", "trades", "business"];
+let activeTab = "talk";
+
+function tabFromHash() {
+  const m = location.hash.match(/^#\/(talk|dashboard|trades|business)/);
+  return m ? m[1] : null;
+}
+
+function showTab(name, opts = {}) {
+  if (!TABS.includes(name)) name = "talk";
+  activeTab = name;
+  for (const t of TABS) $("#tab-" + t).hidden = t !== name;
+  document.querySelectorAll(".tab-btn").forEach(b => {
+    b.classList.toggle("on", b.dataset.tab === name);
+    if (b.dataset.tab === name) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
+  $("#fabMic").hidden = name === "talk";
+  document.querySelector(".app").classList.toggle("fab-on", name !== "talk");
+  if (!opts.skipHash) {
+    const base = "#/" + name;
+    if (!location.hash.startsWith(base)) history.replaceState(null, "", base);
+  }
+  if (name === "dashboard") renderDashboard();
+  if (name === "trades") renderTrades();
+  if (name === "business") renderBusiness();
+}
+
+document.querySelectorAll(".tab-btn").forEach(b => b.onclick = () => { location.hash = "#/" + b.dataset.tab; });
+
+// Something the owner must answer (a draft or a reminder) arrived: show Talk,
+// and close any open dialog so it cannot sit on top of the Yes button.
+function bringTalk() {
+  showTab("talk");
+  for (const d of ["#receiptDlg", "#custDlg"]) if ($(d).open) $(d).close();
+}
+
+function route() {
+  const tab = tabFromHash();
+  // An old-style "#receipt=REF" link keeps the current tab; any other unknown hash shows Talk.
+  if (tab) showTab(tab, { skipHash: true });
+  else if (!/receipt=/.test(location.hash)) showTab("talk", { skipHash: !location.hash });
+  showReceiptFromHash();
+}
+window.addEventListener("hashchange", route);
+
+// Opening a receipt adds one history step, so closing it steps back instead
+// of leaving a duplicate entry that makes Back look broken.
+let receiptPushed = false;
+function openReceipt(ref) { receiptPushed = true; location.hash = "#/" + activeTab + "?receipt=" + ref; }
+
+// The floating mic is the same button as #micBtn: it starts (and shows Talk)
+// or, while live, stops.
+$("#fabMic").onclick = () => {
+  if (!live && !$("#micBtn").disabled) showTab("talk");
+  $("#micBtn").click();
+};
 
 // ---------- talk ----------
 
@@ -77,6 +140,9 @@ function setLive(on, reason) {
   live = on;
   $("#micBtn").classList.toggle("live", on);
   $("#micBtn").setAttribute("aria-label", on ? "Stop talking" : "Start talking");
+  $("#fabMic").classList.toggle("live", on);
+  $("#fabMic").setAttribute("aria-label", on ? "Stop talking" : "Talk");
+  if (!on) { $("#micBtn").classList.remove("hearing"); $("#fabMic").classList.remove("hearing"); }
   $("#micLabel").textContent = on ? "Listening. Tap to stop" : "Tap to start talking";
   if (!on) { $("#status").textContent = reason || "Stopped. Tap to start again."; setTyping(false); }
 }
@@ -149,17 +215,17 @@ function renderAll() {
   const held = rows.reduce((s, r) => s + Math.max(0, -r.b), 0);
   $("#stats").innerHTML = `<div class="stat owe"><b>${naira(owed)}</b><span>customers owe you</span></div>
     <div class="stat hold"><b>${naira(held)}</b><span>you are holding</span></div>`;
-  $("#customers").innerHTML = rows.map(({ c, b }) => `<li data-name="${esc(c.name)}"><span>${esc(c.name)}</span>${amt(b)}</li>`).join("");
-  $("#customers").querySelectorAll("li").forEach(li => li.onclick = () => showCustomer(li.dataset.name));
+  $("#customers").innerHTML = rows.length ? rows.map(({ c, b }) => `<li data-name="${esc(c.name)}"><span>${esc(c.name)}</span>${amt(b)}</li>`).join("")
+    : `<li class="empty">No customers yet.</li>`;
+  $("#customers").querySelectorAll("li[data-name]").forEach(li => li.onclick = () => showCustomer(li.dataset.name));
 
   $("#stock").innerHTML = st.products.map(p => `<li class="${p.stock <= 5 ? "low" : ""}"><span>${esc(p.name)}</span><span class="amt">${p.stock} · ${naira(p.price)}</span></li>`).join("");
-  $("#receipts").innerHTML = st.receipts.length
-    ? st.receipts.slice(0, 12).map(r => `<li data-ref="${r.ref}"><span>${receiptLabel(r)}</span><span class="ref">${r.ref}</span></li>`).join("")
-    : `<li class="empty">Nothing saved yet.</li>`;
-  $("#receipts").querySelectorAll("li[data-ref]").forEach(li => li.onclick = () => { location.hash = "receipt=" + li.dataset.ref; });
-
   $("#keyterms").innerHTML = shopKeyterms(st).map(t => `<span class="chip">${esc(t)}</span>`).join("");
   if (!$("#log").children.length) $("#log").innerHTML = `<div class="empty">Tap the microphone and talk the way you would to a shop assistant.<br>Nothing is saved until you say yes.</div>`;
+
+  if (activeTab === "dashboard") renderDashboard();
+  if (activeTab === "trades") renderTrades();
+  if (activeTab === "business") renderBusiness();
 }
 function receiptLabel(r) {
   if (r.kind === "sale") return `${esc(r.customer || "Walk-in")} · ${naira(r.total)} sale`;
@@ -188,7 +254,7 @@ function showCustomer(name) {
   const rows = c.entries.slice().reverse().map(e => `<tr><td>${new Date(e.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · ${esc(e.note || "")}${e.ref ? ` <span class="ref">${e.ref}</span>` : ""}</td><td class="n">${e.type === "debt" ? "+" : "−"}${naira(e.amount)}</td></tr>`).join("");
   $("#custBody").innerHTML = `<h3>${esc(c.name)}</h3><div>${amt(b)}</div><table>${rows || "<tr><td>No entries yet</td></tr>"}</table><div class="hint">+ took goods on credit, − paid</div>` +
     (b > 0 ? `<p><button type="button" class="ghost small" id="custRemind">Remind ${esc(c.name)} on WhatsApp</button></p>` : "");
-  if (b > 0) $("#custRemind").onclick = () => { const r = reminder(store.state, c.name); showReminder(r.customer, r.text); $("#custDlg").close(); };
+  if (b > 0) $("#custRemind").onclick = () => { const r = reminder(store.state, c.name); $("#custDlg").close(); showReminder(r.customer, r.text); bringTalk(); $("#remindSend").focus(); };
   $("#custDlg").showModal();
 }
 
@@ -203,9 +269,9 @@ $("#remindClose").onclick = () => { $("#remind").hidden = true; };
 // Receipts have their own link, so a customer can be sent one.
 function showReceiptFromHash() {
   const m = location.hash.match(/receipt=([\w-]+)/);
-  if (!m) return;
-  const r = store.state.receipts.find(x => x.ref === m[1]);
-  if (!r) return;
+  const r = m && store.state.receipts.find(x => x.ref === m[1]);
+  // Back out of a receipt link (or a link to one since undone): no dialog.
+  if (!r) { if ($("#receiptDlg").open) $("#receiptDlg").close(); return; }
   const when = new Date(r.ts).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
   let body = `<h3>Receipt <span class="ref">${r.ref}</span></h3><div class="hint">${esc(store.state.shop.name)} · ${when}</div><table>`;
   if (r.kind === "sale") {
@@ -233,8 +299,124 @@ function showReceiptFromHash() {
   };
   if (!$("#receiptDlg").open) $("#receiptDlg").showModal();
 }
-window.addEventListener("hashchange", showReceiptFromHash);
-$("#receiptDlg").addEventListener("close", () => { if (location.hash) history.replaceState(null, "", location.pathname); });
+$("#receiptDlg").addEventListener("close", () => {
+  const pushed = receiptPushed;
+  receiptPushed = false;
+  if (!location.hash.includes("receipt=")) return;
+  if (pushed) history.back(); else history.replaceState(null, "", "#/" + activeTab);
+});
+
+// ---------- dashboard ----------
+
+// Week, not today: until the owner records something, "Today" is all zeros.
+let dashPeriod = "week";
+$("#dashPeriod").querySelectorAll("button").forEach(b => b.onclick = () => {
+  dashPeriod = b.dataset.period;
+  $("#dashPeriod").querySelectorAll("button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
+  renderDashboard();
+});
+
+// summary() leaves out receipts at or after "to", so to = now would drop a
+// receipt saved in this same millisecond. Count up to midnight instead.
+function endOfToday(now) { return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1); }
+
+function renderDashboard() {
+  const st = store.state;
+  const now = new Date();
+  const sum = summary(st, periodStart(dashPeriod, now), endOfToday(now));
+  $("#dashMoneyIn").textContent = naira(sum.cash);
+  $("#dashSales").textContent = naira(sum.sold);
+  $("#dashSold").textContent = sum.sales ? `${sum.sales} sale${sum.sales === 1 ? "" : "s"}` : "";
+  $("#dashProfit").textContent = naira(sum.profit);
+  $("#dashCredit").textContent = naira(sum.credit);
+  $("#dashSpent").textContent = naira(sum.spent);
+
+  const owing = debtors(st, now);
+  $("#dashDebtors").innerHTML = owing.length ? owing.map(d => `<li>
+      <span class="row-main"><span>${esc(d.name)}</span><span class="hint">${d.days === 0 ? "since today" : d.days === 1 ? "1 day" : d.days + " days"}</span></span>
+      <span class="row-end"><span class="amt owe">${naira(d.balance)}</span><button type="button" class="ghost small collect" data-name="${esc(d.name)}">Collect</button></span>
+    </li>`).join("") : `<li class="empty">No one owes you right now.</li>`;
+  $("#dashDebtors").querySelectorAll(".collect").forEach(b => b.onclick = () => {
+    const r = reminder(store.state, b.dataset.name);
+    if (!r.ok || !r.text) return;
+    showReminder(r.customer, r.text);
+    bringTalk();
+    $("#remindSend").focus();
+  });
+
+  const low = st.products.filter(p => p.stock <= 5);
+  $("#dashLowStock").innerHTML = low.length ? low.map(p => `<li><span>${esc(p.name)}</span><span class="amt owe">${p.stock} left</span></li>`).join("")
+    : `<li class="empty">Nothing running low.</li>`;
+
+  $("#dashRecent").innerHTML = st.receipts.length ? st.receipts.slice(0, 5).map(r => `<li data-ref="${r.ref}"><span>${receiptLabel(r)}</span><span class="ref">${r.ref}</span></li>`).join("")
+    : `<li class="empty">Nothing saved yet.</li>`;
+  $("#dashRecent").querySelectorAll("li[data-ref]").forEach(li => li.onclick = () => openReceipt(li.dataset.ref));
+}
+
+// ---------- trades ----------
+
+let tradeStatus = "all", tradePeriod = "week";
+$("#tradeStatus").querySelectorAll("button").forEach(b => b.onclick = () => {
+  tradeStatus = b.dataset.status;
+  $("#tradeStatus").querySelectorAll("button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
+  renderTrades();
+});
+$("#tradePeriod").querySelectorAll("button").forEach(b => b.onclick = () => {
+  tradePeriod = b.dataset.period;
+  $("#tradePeriod").querySelectorAll("button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
+  renderTrades();
+});
+
+function isCredit(r) { return r.kind === "sale" && r.customer && r.paid < r.total; }
+
+function renderTrades() {
+  const st = store.state;
+  const now = new Date();
+  const from = periodStart(tradePeriod, now);
+  const sum = summary(st, from, endOfToday(now));
+  $("#tradeSales").textContent = naira(sum.sold);
+  $("#tradeCash").textContent = naira(sum.cash);
+  $("#tradeCredit").textContent = naira(sum.credit);
+  $("#tradeProfit").textContent = naira(sum.profit);
+
+  let rows = st.receipts.filter(r => (r.kind === "sale" || r.kind === "payment") && new Date(r.ts) >= from);
+  if (tradeStatus === "paid") rows = rows.filter(r => !isCredit(r));
+  if (tradeStatus === "credit") rows = rows.filter(isCredit);
+
+  $("#tradeList").innerHTML = rows.length ? rows.map(r => {
+    const when = new Date(r.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const items = r.kind === "sale" ? r.lines.map(l => `${l.quantity}× ${esc(l.product)}`).join(", ") : "Payment";
+    const total = naira(r.kind === "sale" ? r.total : r.paid);
+    const badge = r.kind === "payment" ? `<span class="badge paid">paid</span>` : isCredit(r) ? `<span class="badge credit">credit</span>` : `<span class="badge paid">paid</span>`;
+    return `<li data-ref="${r.ref}">
+        <div class="row-main"><b>${esc(r.customer || "Walk-in")}</b><span class="hint">${when} · ${items}</span></div>
+        <div class="row-end"><span class="amt">${total}</span>${badge}<span class="ref">${r.ref}</span></div>
+      </li>`;
+  }).join("") : `<li class="empty">Nothing here for this filter.</li>`;
+  $("#tradeList").querySelectorAll("li[data-ref]").forEach(li => li.onclick = () => openReceipt(li.dataset.ref));
+}
+
+// ---------- business ----------
+
+let bizSub = "customers";
+$("#bizSubnav").querySelectorAll("button").forEach(b => b.onclick = () => {
+  bizSub = b.dataset.sub;
+  $("#bizSubnav").querySelectorAll("button").forEach(x => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); });
+  ["customers", "stock", "expenses"].forEach(s => $("#biz-" + s).hidden = s !== bizSub);
+});
+
+function renderBusiness() {
+  const st = store.state;
+  const value = st.products.reduce((s, p) => s + p.stock * (p.cost || 0), 0);
+  $("#stockValue").textContent = naira(value);
+
+  const expenses = st.receipts.filter(r => r.kind === "expense");
+  const total = expenses.reduce((s, r) => s + (r.total || 0), 0);
+  $("#expensesTotal").textContent = naira(total);
+  $("#expensesList").innerHTML = expenses.length ? expenses.map(r => `<li data-ref="${r.ref}"><span>${esc(r.note || "Expense")}</span><span class="amt">${naira(r.total)}</span></li>`).join("")
+    : `<li class="empty">Nothing spent yet.</li>`;
+  $("#expensesList").querySelectorAll("li[data-ref]").forEach(li => li.onclick = () => openReceipt(li.dataset.ref));
+}
 
 // For support: everything the session did except audio, to paste back to us.
 $("#copyLog").onclick = async () => {
@@ -294,12 +476,13 @@ $("#resetBtn").onclick = () => {
   }
   clearTimeout(armed); armed = null;
   $("#resetBtn").textContent = "Reset sample shop";
-  store.state = freshState(); store.save();
+  store.state = demoState(); store.save();
   agent.draft = null; renderDraft(null); renderAll();
   if (agent.ready) agent.send({ type: "session.update", session: { input: { keyterms: shopKeyterms(store.state) } } });
 };
 
 window.addEventListener("pagehide", () => { if (agent.ws?.readyState === 1) agent.ws.send(JSON.stringify({ type: "session.end" })); });
 
+showTab(tabFromHash() || "talk", { skipHash: true });
 renderAll();
-showReceiptFromHash();
+route();

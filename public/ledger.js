@@ -17,9 +17,9 @@ export const SEED = {
     { name: "Peak milk (pack)", say: "Peak milk", price: 1800, cost: 1550, unit: "pack", stock: 50 },
     { name: "Tomato paste (tin)", say: "tomato paste", price: 700, cost: 560, unit: "tin", stock: 80 },
     { name: "Golden Penny spaghetti (carton)", say: "Golden Penny spaghetti", price: 9500, cost: 8400, unit: "carton", stock: 15 },
-    { name: "Garri (paint bucket)", say: "garri", price: 2500, cost: 2000, unit: "bucket", stock: 20 },
+    { name: "Garri (paint bucket)", say: "garri", price: 2500, cost: 2000, unit: "bucket", stock: 5 },
     { name: "Sugar (pack)", say: "sugar", price: 1500, cost: 1250, unit: "pack", stock: 40 },
-    { name: "Semovita (10kg)", say: "Semovita", price: 11000, cost: 9800, unit: "bag", stock: 10 },
+    { name: "Semovita (10kg)", say: "Semovita", price: 11000, cost: 9800, unit: "bag", stock: 4 },
   ],
   customers: [
     { name: "Musa", entries: [{ type: "debt", amount: 4000, note: "2 packs of sugar and garri", ts: "2026-09-20T10:12:00Z" }] },
@@ -250,6 +250,9 @@ export function commit(state, draft, now = new Date()) {
     customer = { name: draft.customer, entries: [] };
     state.customers.push(customer);
   }
+  // Receipt numbers start again at one each day, in the shop's own clock.
+  const dayKey = localDay(now);
+  if (state.seqDay !== dayKey) { state.seq = 0; state.seqDay = dayKey; }
   state.seq += 1;
   const ref = `GB-${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(state.seq).padStart(3, "0")}`;
   const ts = now.toISOString();
@@ -282,7 +285,7 @@ export function commit(state, draft, now = new Date()) {
 export function undo(state, ref) {
   const i = ref ? state.receipts.findIndex(r => r.ref === ref) : 0;
   const r = state.receipts[i];
-  if (!r) return { ok: false, error: "There is nothing saved to undo." };
+  if (!r || (!ref && r.seeded)) return { ok: false, error: "There is nothing saved to undo." };
   if (r.kind === "sale") for (const l of r.lines) {
     const p = state.products.find(x => x.name === l.product);
     if (p) p.stock += l.quantity;
@@ -299,24 +302,165 @@ export function undo(state, ref) {
   return { ok: true, receipt: r, say: `Undone. ${cap(what)}${r.customer ? ` for ${r.customer}` : ""} is removed.${c ? " " + cap(standingText(c.name, balanceOf(c).balance)) + "." : ""}` };
 }
 
-// "How much I make today?" Sales, the cash that actually came in, and what
-// went out on credit, from today's receipts only.
-export function todaySummary(state, now = new Date()) {
-  const day = now.toISOString().slice(0, 10);
-  const today = state.receipts.filter(r => r.ts.slice(0, 10) === day);
-  const sales = today.filter(r => r.kind === "sale");
+// Sales, the cash that actually came in, and what went out on credit, over
+// any stretch of receipts (from inclusive, to exclusive). label sets the
+// word the say text opens and closes with, e.g. "Today" or "This week".
+export function summary(state, from, to = new Date(), label = "Today") {
+  const fromIso = from.toISOString(), toIso = to.toISOString();
+  const receipts = state.receipts.filter(r => r.ts >= fromIso && r.ts < toIso);
+  const sales = receipts.filter(r => r.kind === "sale");
   const sold = round2(sales.reduce((s, r) => s + r.total, 0));
-  const cash = round2(today.filter(r => r.kind === "sale" || r.kind === "payment").reduce((s, r) => s + (r.paid || 0), 0));
-  const spent = round2(today.filter(r => r.kind === "expense").reduce((s, r) => s + r.total, 0));
+  const cash = round2(receipts.filter(r => r.kind === "sale" || r.kind === "payment").reduce((s, r) => s + (r.paid || 0), 0));
+  const spent = round2(receipts.filter(r => r.kind === "expense").reduce((s, r) => s + r.total, 0));
   const known = sales.filter(r => r.profit != null);
   const profit = round2(known.reduce((s, r) => s + r.profit, 0));
   const credit = round2(sales.filter(r => r.customer).reduce((s, r) => s + Math.max(0, r.total - r.paid), 0));
-  if (!sales.length && !spent && !today.some(r => r.kind === "payment")) return { sales: 0, sold: 0, cash: 0, credit: 0, profit: 0, spent, say: spent ? `No sales yet today. Spent ${spoken(spent)}.` : "Nothing recorded today yet." };
-  let say = `Today: ${sales.length} ${sales.length === 1 ? "sale" : "sales"}, ${spoken(sold)}. Cash in, ${spoken(cash)}.`;
+  const when = label === "Today" ? "today" : label.toLowerCase();
+  if (!sales.length && !spent && !receipts.some(r => r.kind === "payment")) return { sales: 0, sold: 0, cash: 0, credit: 0, profit: 0, spent, say: spent ? `No sales yet ${when}. Spent ${spoken(spent)}.` : `Nothing recorded ${when} yet.` };
+  let say = `${label}: ${sales.length} ${sales.length === 1 ? "sale" : "sales"}, ${spoken(sold)}. Cash in, ${spoken(cash)}.`;
   if (credit > 0) say += ` On credit, ${spoken(credit)}.`;
   if (known.length) say += ` Profit${known.length < sales.length ? " on what I know the cost of" : ""}, ${spoken(profit)}.`;
   if (spent) say += ` Spent, ${spoken(spent)}.`;
   return { sales: sales.length, sold, cash, credit, profit, spent, say };
+}
+
+// "How much I make today?" Sales, the cash that actually came in, and what
+// went out on credit, from today's receipts only.
+export function todaySummary(state, now = new Date()) {
+  const from = periodStart("today", now);
+  const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
+  return summary(state, from, to);
+}
+
+// Start of "today", "week" (the last 7 days including today) or "month"
+// (the last 30 days including today), at midnight on the device's own clock,
+// so a Lagos shop's "today" starts at midnight Lagos time, not 01:00.
+export function periodStart(period, now = new Date()) {
+  const back = period === "week" ? 6 : period === "month" ? 29 : 0;
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
+}
+
+export function localDay(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Everyone who currently owes money, worst first, with how many whole days
+// their oldest still-unpaid debt has been sitting. Payments pay off the
+// oldest debt first (FIFO), same order the money actually came in.
+export function debtors(state, now = new Date()) {
+  const nowMs = now.getTime();
+  const list = [];
+  for (const c of state.customers) {
+    const { balance } = balanceOf(c);
+    if (balance <= 0) continue;
+    const entries = [...c.entries].sort((a, b) => new Date(a.ts) - new Date(b.ts));
+    const debts = [];
+    let credit = 0; // money paid ahead (a deposit), used on the next debts
+    for (const e of entries) {
+      if (e.type === "debt") {
+        const take = Math.min(credit, e.amount);
+        credit -= take;
+        debts.push({ remaining: e.amount - take, ts: e.ts });
+        continue;
+      }
+      let pay = e.amount;
+      for (const d of debts) {
+        if (pay <= 0) break;
+        const take = Math.min(d.remaining, pay);
+        d.remaining -= take;
+        pay -= take;
+      }
+      credit += pay;
+    }
+    const oldest = debts.find(d => d.remaining > 0.01);
+    const days = oldest ? Math.max(0, Math.floor((nowMs - new Date(oldest.ts).getTime()) / 86400000)) : 0;
+    list.push({ name: c.name, balance, days });
+  }
+  return list.sort((a, b) => b.balance - a.balance);
+}
+
+// Realistic trading history for the 14 days before "now" (never today), so
+// a demo starts with a shop that already has a past. Ends with every
+// customer balance and product stock exactly back at freshState()'s values,
+// so the sample data the demo script relies on still holds.
+export function seedHistory(state, now = new Date()) {
+  const initialBalances = new Map(state.customers.map(c => [c.name, balanceOf(c).balance]));
+  const initialStock = new Map(state.products.map(p => [p.name, p.stock]));
+
+  const at = (daysAgo, hour, min = 0) =>
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysAgo, hour, min, 0));
+  const draft = (fn, args) => { const r = fn(state, args); if (!r.ok) throw new Error("seedHistory: " + r.error); return r.draft; };
+  const sale = (daysAgo, hour, args) => commit(state, draft(draftSale, args), at(daysAgo, hour));
+  const payment = (daysAgo, hour, args) => commit(state, draft(draftPayment, args), at(daysAgo, hour));
+  const restock = (daysAgo, hour, args) => commit(state, draft(draftRestock, args), at(daysAgo, hour));
+  const expense = (daysAgo, hour, args) => commit(state, draft(draftExpense, args), at(daysAgo, hour));
+
+  // Every customer's credit in this story is paid back inside it, and every
+  // product sold is restocked by the same count, so balances and stock end
+  // exactly where freshState() had them without any made-up "correction"
+  // receipts. Hours are UTC; the shop is in Lagos (UTC+1).
+  sale(13, 8, { customer: "", items: [{ product: "rice", quantity: 2 }] });
+  sale(13, 11, { customer: "Musa", items: [{ product: "rice", quantity: 1 }] });
+  expense(13, 18, { amount: 500, what: "transport" });
+
+  sale(12, 10, { customer: "", items: [{ product: "Indomie", quantity: 1 }], payment_method: "pos" });
+  sale(12, 14, { customer: "", items: [{ product: "Peak milk", quantity: 3 }, { product: "tomato paste", quantity: 6 }] });
+
+  sale(11, 12, { customer: "Tunde", items: [{ product: "beans", quantity: 1 }], amount_paid: 22000, payment_method: "transfer" });
+
+  restock(10, 8, { product: "rice", quantity: 7, supplier: "Alhaji Sule" });
+  payment(10, 17, { customer: "Musa", amount: 3000 });
+  expense(10, 19, { amount: 1000, what: "market levy" });
+
+  sale(9, 10, { customer: "Mama Ngozi", items: [{ product: "Indomie", quantity: 1 }] });
+  sale(9, 15, { customer: "", items: [{ product: "groundnut oil", quantity: 2 }] });
+
+  sale(8, 9, { customer: "Emeka", items: [{ product: "rice", quantity: 1 }] });
+  sale(8, 16, { customer: "", items: [{ product: "groundnut oil", quantity: 1 }], payment_method: "transfer" });
+
+  sale(7, 11, { customer: "", items: [{ product: "Indomie", quantity: 1 }] });
+  expense(7, 18, { amount: 700, what: "nylon bags" });
+
+  restock(6, 8, { product: "Indomie", quantity: 5, supplier: "Chuks Distributors" });
+  sale(6, 13, { customer: "Chinedu", items: [{ product: "Peak milk", quantity: 2 }] });
+
+  sale(5, 9, { customer: "Musa", items: [{ product: "rice", quantity: 1 }], amount_paid: 3000 });
+  payment(5, 16, { customer: "Mama Ngozi", amount: 8500 });
+
+  sale(4, 10, { customer: "", items: [{ product: "tomato paste", quantity: 6 }, { product: "groundnut oil", quantity: 1 }] });
+  payment(4, 17, { customer: "Emeka", amount: 3000 });
+
+  sale(3, 9, { customer: "", items: [{ product: "rice", quantity: 2 }], payment_method: "transfer" });
+  expense(3, 19, { amount: 600, what: "transport" });
+
+  restock(2, 8, { product: "Peak milk", quantity: 5 });
+  restock(2, 8, { product: "tomato paste", quantity: 12 });
+  payment(2, 15, { customer: "Chinedu", amount: 3600 });
+  sale(2, 16, { customer: "", items: [{ product: "beans", quantity: 1 }], payment_method: "pos" });
+
+  sale(1, 9, { customer: "", items: [{ product: "Indomie", quantity: 2 }] });
+  restock(1, 10, { product: "groundnut oil", quantity: 4 });
+  restock(1, 17, { product: "beans", quantity: 2, supplier: "Alhaji Sule" });
+
+  // The demo script depends on freshState()'s balances and stock. If the
+  // story above ever stops netting to zero, fail loudly rather than invent
+  // odd receipts to paper over it.
+  for (const c of state.customers) {
+    if (round2(balanceOf(c).balance - (initialBalances.get(c.name) ?? 0)) !== 0) throw new Error("seedHistory: balance drifted for " + c.name);
+  }
+  for (const p of state.products) {
+    if (p.stock !== initialStock.get(p.name)) throw new Error("seedHistory: stock drifted for " + p.name);
+  }
+  for (const r of state.receipts) r.seeded = true;
+
+  state.seq = 0; state.seqDay = null; // the owner's first save today is "receipt one"
+  state.seeded = true;
+  return state;
+}
+
+// A sample shop that already has two weeks of trading behind it, for demos.
+export function demoState(now = new Date()) {
+  return seedHistory(freshState(), now);
 }
 
 // "Remind Emeka": a polite message the owner sends from their own WhatsApp.

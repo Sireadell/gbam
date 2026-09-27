@@ -3,7 +3,7 @@
 // for, and the tools it must use to touch the books. The books never trust
 // the model with a number: tools compute everything and return the sentence
 // to read back.
-import { draftSale, draftPayment, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms } from "./ledger.js";
+import { draftSale, draftPayment, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms, summary, periodStart, debtors, spoken, inWords } from "./ledger.js";
 
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
 const YES = /\b(gbam|yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct|oya|save am)\b/i;
@@ -22,6 +22,8 @@ Rules:
 7. "How much does X owe" or similar: call check_account.
 8. "Undo", "remove that", "that was wrong" about something already saved: call undo_last.
 9. "How much I make today", "today's sales" or similar: call today_summary.
+9a. "How was this week", "how was this month", "week's sales", "month's sales" or similar: call period_summary with the period. "Today" still goes to today_summary.
+9b. "Who owe me", "who dey owe me", "who owes money", "wetin dem owe": call who_owes.
 10. "Remind X", "send X reminder", "tell X to pay": call remind_customer.
 11. If a price sounds odd, the tool will say so. Ask the owner to say the price again; only if they repeat the same price, draft again with price_confirmed true.
 12. Money is naira. "3k" or "3 thousand" means 3000. "Two-five" after a thousand amount usually means 2,500; if unsure, ask.
@@ -104,6 +106,14 @@ const TOOLS = [
   { type: "function", name: "today_summary",
     description: "Today's totals: number of sales, money sold, cash that came in, and how much went out on credit. Returns the sentence to say.",
     parameters: { type: "object", properties: {} } },
+  { type: "function", name: "period_summary",
+    description: "Totals for a stretch longer than today: this week (last 7 days) or this month (last 30 days). Returns the sentence to say.",
+    parameters: { type: "object", properties: {
+      period: { type: "string", enum: ["week", "month"], description: "'week' for the last 7 days, 'month' for the last 30 days." } },
+      required: ["period"] } },
+  { type: "function", name: "who_owes",
+    description: "The customers who currently owe money, worst first, with how long they have owed it. Returns the sentence to say.",
+    parameters: { type: "object", properties: {} } },
   { type: "function", name: "remind_customer",
     description: "Prepare a polite WhatsApp reminder to a customer about what they owe. It is shown on screen for the owner to send; nothing is sent automatically. Returns the sentence to say.",
     parameters: { type: "object", properties: { customer: { type: "string", description: "Customer's name as said, e.g. 'Emeka'." } }, required: ["customer"] } },
@@ -112,6 +122,19 @@ const TOOLS = [
     parameters: { type: "object", properties: {
       customer: { type: "string", description: "Customer's name as said." } }, required: ["customer"] } },
 ];
+
+// "Who owe me": the top 3 debtors, worst first, said in one sentence.
+function whoOwesSay(state) {
+  const all = debtors(state);
+  if (!all.length) return "Nobody owes you anything right now.";
+  const top = all.slice(0, 3);
+  const n = inWords(all.length);
+  const who = all.length === 1 ? "One person owes you" : `${n.charAt(0).toUpperCase() + n.slice(1)} people owe you`;
+  const lead = all.length > top.length ? `. The biggest ${inWords(top.length)}: ` : ". ";
+  const since = d => d.days === 0 ? "since today" : d.days === 1 ? "for one day" : `for ${inWords(d.days)} days`;
+  const lines = top.map(d => `${d.name}, ${spoken(d.balance)}, ${since(d)}`);
+  return `${who}${lead}${lines.join("; ")}.`;
+}
 
 export class ShopAgent {
   constructor({ store, on }) {
@@ -310,6 +333,11 @@ export class ShopAgent {
       return r.ok ? { ok: true, say: r.say } : { ok: false, error: r.error };
     }
     if (name === "today_summary") return { ok: true, say: todaySummary(st).say };
+    if (name === "period_summary") {
+      const label = args.period === "month" ? "This month" : "This week";
+      return { ok: true, say: summary(st, periodStart(args.period), new Date(), label).say };
+    }
+    if (name === "who_owes") return { ok: true, say: whoOwesSay(st) };
     if (name === "remind_customer") {
       const r = reminder(st, args.customer);
       if (!r.ok) return { ok: false, error: r.error };

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo, todaySummary, reminder, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport } from "../public/ledger.js";
+import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo, todaySummary, reminder, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, summary, periodStart, debtors, seedHistory, demoState } from "../public/ledger.js";
 
 const bal = (s, name) => balanceOf(s.customers.find(c => c.name === name)).balance;
 
@@ -196,9 +196,10 @@ test("price change is read back and can be undone", () => {
 test("stock check for one product, and what is running low", () => {
   const s = freshState();
   assert.equal(stockReport(s, "indomie").say, "25 cartons of Indomie left, selling at eight thousand five hundred naira.");
+  // The sample shop starts with two items low, so the dashboard has something to show.
+  assert.equal(stockReport(s, "").say, "Running low: Semovita, 4 left; garri, 5 left.");
+  for (const p of s.products) if (p.stock <= 5) p.stock = 20;
   assert.equal(stockReport(s, "").say, "Nothing is running low. Everything has more than five left.");
-  s.products.find(p => p.say === "Semovita").stock = 3;
-  assert.equal(stockReport(s).say, "Running low: Semovita, 3 left.");
 });
 
 test("discount, transfer, and expenses feed today's summary", () => {
@@ -240,4 +241,114 @@ test("new product with only a buying price sells at 6 to 7% more", () => {
     const k = draftNewProduct(s, { name: "Test item", unit_cost: c }).draft.item.price / c - 1;
     assert.ok(k >= 0.06 && k <= 0.07, `cost ${c} markup ${k}`);
   }
+});
+
+test("todaySummary is unchanged, now built on top of summary()", () => {
+  const s = freshState();
+  assert.equal(todaySummary(s, new Date("2026-09-26T12:00:00Z")).say, "Nothing recorded today yet.");
+  commit(s, draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: 2 }] }).draft, new Date("2026-09-26T09:00:00Z"));
+  commit(s, draftPayment(s, { customer: "Emeka", amount: 20000 }).draft, new Date("2026-09-26T11:00:00Z"));
+  const t = todaySummary(s, new Date("2026-09-26T18:00:00Z"));
+  assert.equal(t.say, "Today: 1 sale, six thousand naira. Cash in, twenty thousand naira. On credit, six thousand naira. Profit, one thousand naira.");
+});
+
+test("periodStart gives today, a 7-day week and a 30-day month", () => {
+  const now = new Date("2026-09-27T15:00:00Z");
+  // Midnight on the device's own clock (Lagos in real use).
+  const mid = (y, m, d) => new Date(y, m - 1, d).getTime();
+  assert.equal(periodStart("today", now).getTime(), mid(2026, 9, 27));
+  assert.equal(periodStart("week", now).getTime(), mid(2026, 9, 21));
+  assert.equal(periodStart("month", now).getTime(), mid(2026, 8, 29));
+});
+
+test("receipt numbers start again at one each day", () => {
+  const s = freshState();
+  const sell = when => commit(s, draftSale(s, { customer: "", items: [{ product: "rice", quantity: 1 }] }).draft, when);
+  sell(new Date(2026, 8, 27, 9));
+  assert.match(sell(new Date(2026, 8, 27, 10)).say, /receipt two/);
+  const next = sell(new Date(2026, 8, 28, 9));
+  assert.match(next.say, /receipt one/);
+  assert.equal(next.receipt.ref, "GB-0928-001");
+});
+
+test("summary over a week totals more than one day", () => {
+  const s = freshState();
+  const now = new Date("2026-09-27T15:00:00Z");
+  commit(s, draftSale(s, { customer: "", items: [{ product: "rice", quantity: 1 }] }).draft, new Date("2026-09-22T09:00:00Z"));
+  commit(s, draftSale(s, { customer: "", items: [{ product: "rice", quantity: 1 }] }).draft, new Date("2026-09-26T09:00:00Z"));
+  const week = summary(s, periodStart("week", now), now, "This week");
+  assert.equal(week.sales, 2);
+  assert.ok(week.sold > 0);
+  assert.match(week.say, /^This week: 2 sales/);
+});
+
+test("debtors: balances match, days are non-negative and sorted worst first", () => {
+  const s = freshState();
+  const now = new Date("2026-09-27T00:00:00Z");
+  const d = debtors(s, now);
+  assert.deepEqual(d.map(x => x.name), ["Emeka", "Chinedu", "Mama Ngozi", "Musa"]);
+  for (const x of d) assert.ok(x.days >= 0, `${x.name} days ${x.days}`);
+  for (let i = 1; i < d.length; i++) assert.ok(d[i - 1].balance >= d[i].balance);
+});
+
+test("debtors pays off the oldest debt first (FIFO)", () => {
+  const s = freshState();
+  // Tunde: 8500 debt on the 15th, 10000 payment on the 22nd -> fully clear, no debtor entry.
+  assert.ok(!debtors(s, new Date("2026-09-27T00:00:00Z")).some(x => x.name === "Tunde"));
+});
+
+test("seedHistory: balances and stock land back exactly on freshState()'s, no receipt dated today", () => {
+  const now = new Date("2026-09-27T08:00:00Z");
+  const fresh = freshState();
+  const seeded = seedHistory(freshState(), now);
+  assert.equal(seeded.seeded, true);
+  for (const c of fresh.customers) assert.equal(balanceOf(seeded.customers.find(x => x.name === c.name)).balance, balanceOf(c).balance, c.name);
+  for (const p of fresh.products) assert.equal(seeded.products.find(x => x.name === p.name).stock, p.stock, p.name);
+  const today = now.toISOString().slice(0, 10);
+  assert.ok(!seeded.receipts.some(r => r.ts.slice(0, 10) === today), "no seeded receipt is dated today");
+  assert.ok(seeded.receipts.length >= 18 && seeded.receipts.length <= 40, `receipt count ${seeded.receipts.length}`);
+});
+
+test("after seedHistory, a sale saved today is still 'receipt one'", () => {
+  const now = new Date("2026-09-27T08:00:00Z");
+  const seeded = demoState(now);
+  const r = commit(seeded, draftSale(seeded, { customer: "", items: [{ product: "rice", quantity: 1 }] }).draft, now);
+  assert.match(r.say, /^Saved, receipt one\./);
+  assert.equal(r.receipt.ref, `GB-${String(now.getUTCMonth() + 1).padStart(2, "0")}${String(now.getUTCDate()).padStart(2, "0")}-001`);
+});
+
+test("demoState gives a week of sales", () => {
+  const now = new Date("2026-09-27T08:00:00Z");
+  const seeded = demoState(now);
+  const week = summary(seeded, periodStart("week", now), now, "This week");
+  assert.ok(week.sales > 0, "week should have sales");
+});
+
+test("debtors: a deposit paid before any debt pays the next debts first", () => {
+  const s = freshState();
+  const ib = s.customers.find(c => c.name === "Ibrahim"); // 3000 deposit on the 24th
+  ib.entries.push({ type: "debt", amount: 2000, ts: "2026-09-25T10:00:00Z" }, { type: "debt", amount: 5000, ts: "2026-09-26T10:00:00Z" });
+  const d = debtors(s, new Date("2026-09-27T12:00:00Z")).find(x => x.name === "Ibrahim");
+  assert.equal(d.balance, 4000);
+  assert.equal(d.days, 1, "the 25th debt is covered by the deposit, so the oldest unpaid is the 26th");
+});
+
+test("seedHistory: no made-up correction receipts, every price is the shop's usual one", () => {
+  const s = demoState(new Date("2026-09-27T08:00:00Z"));
+  for (const r of s.receipts.filter(r => r.kind === "sale")) {
+    for (const l of r.lines) assert.equal(l.unit_price, s.products.find(p => p.name === l.product).price, `${r.ref} ${l.product}`);
+    assert.ok(r.profit >= 0 && r.profit < r.total / 2, `${r.ref} profit ${r.profit}`);
+  }
+  assert.equal(new Set(s.receipts.map(r => r.ts.slice(0, 10))).size, 13, "one or more receipts on each of the 13 days");
+});
+
+test("undo with no ref does not reach into the seeded history", () => {
+  const now = new Date("2026-09-27T08:00:00Z");
+  const s = demoState(now);
+  const n = s.receipts.length;
+  assert.equal(undo(s).ok, false);
+  assert.equal(s.receipts.length, n);
+  commit(s, draftSale(s, { customer: "", items: [{ product: "rice", quantity: 1 }] }).draft, now);
+  assert.equal(undo(s).ok, true);
+  assert.equal(undo(s).ok, false);
 });
