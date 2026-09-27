@@ -27,7 +27,7 @@ Rules:
 12. Money is naira. "3k" or "3 thousand" means 3000. "Two-five" after a thousand amount usually means 2,500; if unsure, ask.
 13. "Gbam" means yes, exactly.
 14. Stock coming IN (bought from a supplier, "add", "I buy", "just arrive"): call draft_restock, never draft_sale.
-15. A product not in the stock list with a selling price: draft_new_product. A new price for an existing product: draft_price_change.
+15. A product not in the stock list: draft_new_product. If only the buying price is said, do not ask for a selling price; the app sets it. For stock coming in, never ask the buying price; the app uses the saved one. A new price for an existing product: draft_price_change.
 16. "How many X remain/dey", "wetin dey finish", "what is running low": call check_stock.
 17. Money the shop spent that is not stock (transport, rent, NEPA, market levy, food): call draft_expense.
 18. A sale paid by transfer or POS: pass payment_method. A discount ("give am 500 off", "remove 500"): pass discount in naira.
@@ -73,14 +73,14 @@ const TOOLS = [
       price_confirmed: { type: "boolean", description: "True only after the tool said the price looked wrong and the owner repeated it." } },
       required: ["product", "quantity"] } },
   { type: "function", name: "draft_new_product",
-    description: "Prepare adding a product the shop does not stock yet. Needs its name and selling price. Returns the sentence to read back. Does not save.",
+    description: "Prepare adding a product the shop does not stock yet. Needs its name and either the selling price or the buying price (if only the buying price is said, the selling price is set automatically at the shop's usual markup; never ask for it). Returns the sentence to read back. Does not save.",
     parameters: { type: "object", properties: {
       name: { type: "string", description: "Product name, e.g. 'Milo tin'." },
-      sell_price: { type: "number", description: "Naira it sells for, e.g. 2000." },
+      sell_price: { type: "number", description: "Naira it sells for, only if said, e.g. 2000." },
       unit: { type: "string", description: "Unit it is sold in, only if said, e.g. 'tin', 'bag', 'carton'." },
       unit_cost: { type: "number", description: "Naira the shop paid for each, only if said." },
       quantity: { type: "number", description: "How many are in stock now, only if said." } },
-      required: ["name", "sell_price"] } },
+      required: ["name"] } },
   { type: "function", name: "draft_price_change",
     description: "Prepare a new selling price for a product already in stock. Returns the sentence to read back. Does not save.",
     parameters: { type: "object", properties: {

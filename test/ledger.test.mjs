@@ -221,3 +221,23 @@ test("a unit word like 'tin' does not make two products look alike", () => {
   assert.equal(bestMatch(s.products, "milo", ["name", "say"]).match.name, "Milo Tin");
   assert.equal(bestMatch(s.products, "tomato tin", ["name", "say"]).match.say, "tomato paste");
 });
+
+test("restock without a price uses the saved buying price", () => {
+  const s = freshState();
+  const r = draftRestock(s, { product: "rice", quantity: 10 });
+  assert.ok(r.ok, r.error);
+  assert.equal(r.draft.total, 25000);
+  assert.match(r.draft.say, /your usual/);
+});
+
+test("new product with only a buying price sells at 6 to 7% more", () => {
+  const s = freshState();
+  const r = draftNewProduct(s, { name: "Milo tin", unit: "tin", unit_cost: 2000 });
+  assert.ok(r.ok, r.error);
+  const m = r.draft.item.price / 2000 - 1;
+  assert.ok(m >= 0.06 && m <= 0.07, `markup ${m}`);
+  for (const c of [150, 560, 1250, 2500, 7600, 19000]) {
+    const k = draftNewProduct(s, { name: "Test item", unit_cost: c }).draft.item.price / c - 1;
+    assert.ok(k >= 0.06 && k <= 0.07, `cost ${c} markup ${k}`);
+  }
+});

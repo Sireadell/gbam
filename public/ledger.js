@@ -380,7 +380,9 @@ export function draftRestock(state, args) {
   const f = findProduct(state, args.product);
   if (!f.product) return f;
   const p = f.product;
-  const unitCost = args.unit_cost != null && args.unit_cost !== "" ? Number(args.unit_cost) : null;
+  // No price said: the owner means the usual buying price already saved.
+  const said = args.unit_cost != null && args.unit_cost !== "";
+  const unitCost = said ? Number(args.unit_cost) : p.cost ?? null;
   if (unitCost != null && !(unitCost > 0)) return fail("The buying price is not a number. Ask what they paid for each.");
   if (unitCost != null && !args.price_confirmed && p.cost && (unitCost < p.cost / 4 || unitCost > p.cost * 4))
     return fail(`The buying price ${spoken(unitCost)} for ${p.say} looks wrong (last time ${spoken(p.cost)}). Ask the owner to say it again, then call again with price_confirmed true if they repeat it.`);
@@ -388,7 +390,7 @@ export function draftRestock(state, args) {
     : p.cost == null || p.stock <= 0 ? unitCost
     : round2((p.stock * p.cost + qty * unitCost) / (p.stock + qty));
   let say = `Add ${countOf(qty, p.unit, p.say)}`;
-  if (unitCost != null) say += ` at ${inWords(unitCost)} each, ${spoken(qty * unitCost)} in all`;
+  if (unitCost != null) say += ` at ${said ? "" : "your usual "}${inWords(unitCost)} each, ${spoken(qty * unitCost)} in all`;
   if (args.supplier) say += `, from ${titleCase(args.supplier)}`;
   say += `. Stock goes from ${p.stock} to ${p.stock + qty}. Say yes.`;
   if (unitCost != null && unitCost >= p.price) say = `Careful, you pay ${inWords(unitCost)} but sell at ${inWords(p.price)}. ` + say;
@@ -396,17 +398,27 @@ export function draftRestock(state, args) {
     supplier: args.supplier ? titleCase(args.supplier) : null, prevCost: p.cost ?? null, newCost, say } };
 }
 
+export const MARKUP = 0.065;
+// Cost plus 6.5%, rounded to the nearest 10 naira (nearest 1 under 1,000),
+// which keeps the margin between 6 and 7% for normal shop prices.
+export function autoPrice(cost) {
+  const raw = cost * (1 + MARKUP);
+  return cost >= 1000 ? Math.round(raw / 10) * 10 : Math.round(raw);
+}
+
 export function draftNewProduct(state, args) {
   const name = String(args.name || "").trim();
   if (!name) return fail("The product name is missing. Ask for it.");
-  const price = Number(args.sell_price);
-  if (!(price > 0)) return fail("The selling price is missing. Ask what it sells for.");
+  const cost = Number(args.unit_cost) > 0 ? Number(args.unit_cost) : null;
+  // Only the buying price said: sell at the shop's usual markup (6 to 7%).
+  const auto = !(Number(args.sell_price) > 0) && cost != null;
+  const price = auto ? autoPrice(cost) : Number(args.sell_price);
+  if (!(price > 0)) return fail("The price is missing. Ask what they bought it for (the selling price is then set automatically), or what it sells for.");
   const m = bestMatch(state.products, name, ["name", "say"]);
   if (m.match && norm(m.match.say) === norm(name)) return fail(`'${m.match.say}' is already in the stock list. To add more of it use draft_restock; to change its price use draft_price_change.`);
-  const cost = Number(args.unit_cost) > 0 ? Number(args.unit_cost) : null;
   const stock = Number(args.quantity) > 0 ? Number(args.quantity) : 0;
   const unit = args.unit ? String(args.unit).trim().toLowerCase() : "";
-  const say = `New product ${titleCase(name)}, selling at ${spoken(price)}${unit ? " a " + unit : ""}${cost ? `, bought at ${inWords(cost)}` : ""}${stock ? `, ${stock} in stock` : ""}. Say yes.`;
+  const say = `New product ${titleCase(name)}, selling at ${spoken(price)}${auto ? " (your usual markup)" : ""}${unit ? " a " + unit : ""}${cost ? `, bought at ${inWords(cost)}` : ""}${stock ? `, ${stock} in stock` : ""}. Say yes.`;
   // "Milo tin" sold in tins is spoken "2 tins of Milo", not "2 tins of Milo Tin".
   const words = titleCase(name).split(" ");
   const sayName = words.length > 1 && unit && words[words.length - 1].toLowerCase().replace(/s$/, "") === unit.replace(/s$/, "")
