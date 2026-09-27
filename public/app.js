@@ -227,7 +227,8 @@ function showReceiptFromHash() {
   $("#undoBtn").onclick = () => {
     if (!armedUndo) { armedUndo = true; $("#undoBtn").textContent = "Tap again to remove it from the books"; return; }
     const res = agent.undo(r.ref);
-    if (res.ok && agent.ready) agent.send({ type: "conversation.message", role: "system", content: `The owner undid receipt ${r.ref} on screen. ${res.say}` });
+    // A bare conversation.message is not seen by the next reply (see typed() in agent.js), so the note rides in reply.create.
+    if (res.ok && agent.ready) agent.send({ type: "reply.create", instructions: `The owner just undid receipt ${r.ref} on screen. Say exactly: "${res.say}"` });
     $("#receiptDlg").close();
   };
   if (!$("#receiptDlg").open) $("#receiptDlg").showModal();
@@ -258,7 +259,10 @@ function logTool(name, args, result) {
 // record downloads as a spreadsheet file that opens in Excel or Sheets.
 function csv(rows) {
   return rows.map(r => r.map(v => {
-    const s = String(v ?? "");
+    let s = String(v ?? "");
+    // A name like "=HYPERLINK(...)" would run as a formula in Excel, so text
+    // starting with = + - or @ gets a leading apostrophe. Numbers are left alone.
+    if (typeof v === "string" && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   }).join(",")).join("\r\n");
 }
