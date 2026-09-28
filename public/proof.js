@@ -108,12 +108,12 @@ async function start() {
 function finish(plain, withTerms) {
   const exp = expectedTerms();
   const p = scoreOf(plain, exp), w = scoreOf(withTerms, exp);
-  $("#plainScore").textContent = `Got ${p} of ${exp.length} shop words`;
-  $("#withScore").textContent = `Got ${w} of ${exp.length} shop words`;
+  $("#plainScore").textContent = `Heard ${p} of ${exp.length} names and products right`;
+  $("#withScore").textContent = `Heard ${w} of ${exp.length} names and products right`;
   $("#verdict").textContent = !plain && !withTerms ? "Nothing was heard. Check the microphone and try again."
-    : w > p ? `The key terms caught ${w - p} more of this shop's words (${w} of ${exp.length}, against ${p}).`
-    : w === p ? `Both heard ${w} of ${exp.length} shop words this time. Try a harder name, like Oluwaseun.`
-    : `This time the plain copy did better (${p} against ${w}). Real results vary, so try again.`;
+    : w > p ? `Key terms helped: ${w} of ${exp.length} right, against ${p} without.`
+    : w === p ? `Both got ${w} of ${exp.length} right this time. Try a harder name, like Oluwaseun.`
+    : `This time the copy without key terms did better (${p} against ${w}). Results vary, so try again.`;
 }
 
 function reset() {

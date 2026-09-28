@@ -317,7 +317,7 @@ export function summary(state, from, to = new Date(), label = "Today") {
   const credit = round2(sales.filter(r => r.customer).reduce((s, r) => s + Math.max(0, r.total - r.paid), 0));
   const when = label === "Today" ? "today" : label.toLowerCase();
   if (!sales.length && !spent && !receipts.some(r => r.kind === "payment")) return { sales: 0, sold: 0, cash: 0, credit: 0, profit: 0, spent, say: spent ? `No sales yet ${when}. Spent ${spoken(spent)}.` : `Nothing recorded ${when} yet.` };
-  let say = `${label}: ${sales.length} ${sales.length === 1 ? "sale" : "sales"}, ${spoken(sold)}. Cash in, ${spoken(cash)}.`;
+  let say = `${label}: ${sales.length} ${sales.length === 1 ? "sale" : "sales"}, ${spoken(sold)}. Money in, ${spoken(cash)}.`;
   if (credit > 0) say += ` On credit, ${spoken(credit)}.`;
   if (known.length) say += ` Profit${known.length < sales.length ? " on what I know the cost of" : ""}, ${spoken(profit)}.`;
   if (spent) say += ` Spent, ${spoken(spent)}.`;

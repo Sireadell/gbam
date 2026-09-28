@@ -146,7 +146,10 @@ function setLive(on, reason) {
   $("#micLabel").textContent = on ? "Listening. Tap to stop" : "Tap to start talking";
   if (!on) { $("#status").textContent = reason || "Stopped. Tap to start again."; setTyping(false); }
 }
-function setTyping(on) { $("#typeInput").disabled = !on; $("#typeBtn").disabled = !on; }
+function setTyping(on) {
+  $("#typeInput").disabled = !on; $("#typeBtn").disabled = !on;
+  $("#typeInput").placeholder = on ? "Or type it, e.g. Chinedu paid 5k" : "Tap the mic first, then you can type too";
+}
 
 $("#typeForm").onsubmit = e => {
   e.preventDefault();
@@ -219,7 +222,7 @@ function renderAll() {
     : `<li class="empty">No customers yet.</li>`;
   $("#customers").querySelectorAll("li[data-name]").forEach(li => li.onclick = () => showCustomer(li.dataset.name));
 
-  $("#stock").innerHTML = st.products.map(p => `<li class="${p.stock <= 5 ? "low" : ""}"><span>${esc(p.name)}</span><span class="amt">${p.stock} · ${naira(p.price)}</span></li>`).join("");
+  $("#stock").innerHTML = st.products.map(p => `<li class="${p.stock <= 5 ? "low" : ""}"><span>${esc(p.name)}</span><span class="amt">${p.stock} left · ${naira(p.price)}</span></li>`).join("");
   $("#keyterms").innerHTML = shopKeyterms(st).map(t => `<span class="chip">${esc(t)}</span>`).join("");
   if (!$("#log").children.length) $("#log").innerHTML = `<div class="empty">Tap the microphone and talk the way you would to a shop assistant.<br>Nothing is saved until you say yes.</div>`;
 
@@ -252,7 +255,7 @@ function showCustomer(name) {
   if (!c) return;
   const b = balanceOf(c).balance;
   const rows = c.entries.slice().reverse().map(e => `<tr><td>${new Date(e.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} · ${esc(e.note || "")}${e.ref ? ` <span class="ref">${e.ref}</span>` : ""}</td><td class="n">${e.type === "debt" ? "+" : "−"}${naira(e.amount)}</td></tr>`).join("");
-  $("#custBody").innerHTML = `<h3>${esc(c.name)}</h3><div>${amt(b)}</div><table>${rows || "<tr><td>No entries yet</td></tr>"}</table><div class="hint">+ took goods on credit, − paid</div>` +
+  $("#custBody").innerHTML = `<h3>${esc(c.name)}</h3><div>${amt(b)}</div><table>${rows || "<tr><td>No entries yet</td></tr>"}</table><div class="hint">+ bought on credit, − paid</div>` +
     (b > 0 ? `<p><button type="button" class="ghost small" id="custRemind">Remind ${esc(c.name)} on WhatsApp</button></p>` : "");
   if (b > 0) $("#custRemind").onclick = () => { const r = reminder(store.state, c.name); $("#custDlg").close(); showReminder(r.customer, r.text); bringTalk(); $("#remindSend").focus(); };
   $("#custDlg").showModal();
@@ -425,7 +428,7 @@ $("#copyLog").onclick = async () => {
     if (m.token) m.token = "(hidden)";
     return `${new Date(e.t).toISOString().slice(11, 23)} ${e.dir} ${JSON.stringify(m)}`;
   }).join("\n") || "No session yet.";
-  try { await navigator.clipboard.writeText(lines); $("#copyLogMsg").textContent = "Copied. Paste it to us."; }
+  try { await navigator.clipboard.writeText(lines); $("#copyLogMsg").textContent = "Copied."; }
   catch { $("#logOut").hidden = false; $("#logOut").value = lines; $("#logOut").select(); $("#copyLogMsg").textContent = "Select all and copy."; }
 };
 

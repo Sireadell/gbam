@@ -146,7 +146,7 @@ test("today's summary counts only today's receipts", () => {
   commit(s, draftSale(s, { customer: "Aisha", items: [{ product: "rice", quantity: 1 }] }).draft, new Date("2026-09-25T11:00:00Z"));
   const t = todaySummary(s, new Date("2026-09-26T18:00:00Z"));
   assert.deepEqual([t.sales, t.sold, t.cash, t.credit], [2, 9000, 23000, 6000]);
-  assert.equal(t.say, "Today: 2 sales, nine thousand naira. Cash in, twenty-three thousand naira. On credit, six thousand naira. Profit, one thousand five hundred naira.");
+  assert.equal(t.say, "Today: 2 sales, nine thousand naira. Money in, twenty-three thousand naira. On credit, six thousand naira. Profit, one thousand five hundred naira.");
 });
 
 test("reminder is written for what the customer really owes", () => {
@@ -209,7 +209,7 @@ test("discount, transfer, and expenses feed today's summary", () => {
   assert.equal(r.draft.say, "2 bags of rice at three thousand. Less five hundred discount, total five thousand five hundred naira. Paid by transfer. Say yes.");
   assert.equal(commit(s, r.draft, now).receipt.profit, 500);
   commit(s, draftExpense(s, { amount: 2000, what: "transport" }).draft, now);
-  assert.equal(todaySummary(s, now).say, "Today: 1 sale, five thousand five hundred naira. Cash in, five thousand five hundred naira. Profit, five hundred naira. Spent, two thousand naira.");
+  assert.equal(todaySummary(s, now).say, "Today: 1 sale, five thousand five hundred naira. Money in, five thousand five hundred naira. Profit, five hundred naira. Spent, two thousand naira.");
   assert.equal(draftSale(s, { customer: "", items: [{ product: "sugar", quantity: 1 }], discount: 2000 }).ok, false, "discount bigger than the sale");
 });
 
@@ -249,7 +249,7 @@ test("todaySummary is unchanged, now built on top of summary()", () => {
   commit(s, draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: 2 }] }).draft, new Date("2026-09-26T09:00:00Z"));
   commit(s, draftPayment(s, { customer: "Emeka", amount: 20000 }).draft, new Date("2026-09-26T11:00:00Z"));
   const t = todaySummary(s, new Date("2026-09-26T18:00:00Z"));
-  assert.equal(t.say, "Today: 1 sale, six thousand naira. Cash in, twenty thousand naira. On credit, six thousand naira. Profit, one thousand naira.");
+  assert.equal(t.say, "Today: 1 sale, six thousand naira. Money in, twenty thousand naira. On credit, six thousand naira. Profit, one thousand naira.");
 });
 
 test("periodStart gives today, a 7-day week and a 30-day month", () => {

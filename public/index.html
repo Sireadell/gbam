@@ -43,14 +43,14 @@
         </button>
         <div>
           <div id="micLabel" class="mic-label">Tap to start talking</div>
-          <div id="status" class="status">Say a sale like: "Two bags of rice to Musa"</div>
+          <div id="status" class="status">Try: "Two bags of rice to Musa"</div>
         </div>
       </div>
 
       <div id="log" class="log" aria-live="polite"></div>
 
       <div id="draft" class="draft" hidden>
-        <div class="draft-title">Waiting for your yes</div>
+        <div class="draft-title">Say yes to save</div>
         <div id="draftBody"></div>
         <div class="draft-actions">
           <button id="confirmBtn" class="primary">Yes, save</button>
@@ -68,7 +68,7 @@
       </div>
 
       <form id="typeForm" class="type">
-        <input id="typeInput" placeholder="Or type it, e.g. Chinedu paid 5k" autocomplete="off" disabled>
+        <input id="typeInput" placeholder="Tap the mic first, then you can type too" autocomplete="off" disabled>
         <button class="ghost" disabled id="typeBtn">Send</button>
       </form>
       <div class="tries" id="tries"></div>
@@ -76,13 +76,13 @@
 
     <details class="card howto">
       <summary>How it works</summary>
-      <h2 style="margin-top:14px">Names Gbam teaches AssemblyAI</h2>
-      <p class="hint">Speech recognition often mishears Nigerian names and market goods, like "Mom and Gozi" for Mama Ngozi. So every time you start talking, Gbam gives AssemblyAI the customer names and products in your record book below. This demo uses a sample shop, Mama Bisi Provisions. When you add a new customer, their name joins the list straight away. <a href="/proof.html">See the difference it makes</a>.</p>
+      <h2 style="margin-top:14px">Key terms</h2>
+      <p class="hint">Speech recognition often mishears Nigerian names, like "Mom and Gozi" for Mama Ngozi. So Gbam sends AssemblyAI the sample shop's customers and products as key terms. New customers are added automatically. <a href="/proof.html">See the difference</a></p>
       <div id="keyterms" class="chips"></div>
-      <h2 style="margin-top:16px">What Gbam did behind the scenes</h2>
-      <p class="hint">Each step the voice agent asked the app to do, such as working out a sale or looking up a balance, with the app's answer. It fills in as you talk.</p>
+      <h2 style="margin-top:16px">Activity log</h2>
+      <p class="hint">Each step the voice agent took, and what the app answered.</p>
       <ol id="tools" class="tools"></ol>
-      <p><button type="button" class="ghost small" id="copyLog">Copy session log</button> <span id="copyLogMsg" class="hint"></span></p>
+      <p><button type="button" class="ghost small" id="copyLog">Copy log</button> <span id="copyLogMsg" class="hint"></span></p>
       <textarea id="logOut" rows="4" readonly hidden style="width:100%;font:12px ui-monospace,Consolas,monospace"></textarea>
     </details>
   </section>
@@ -116,7 +116,7 @@
     </div>
 
     <div class="card">
-      <h2>Latest records</h2>
+      <h2>Recent activity</h2>
       <ul id="dashRecent" class="receipts"></ul>
     </div>
   </section>
@@ -130,12 +130,12 @@
       </div>
       <div class="pills" id="tradePeriod">
         <button type="button" class="pill" data-period="today" aria-pressed="false">Today</button>
-        <button type="button" class="pill on" data-period="week" aria-pressed="true">Week</button>
-        <button type="button" class="pill" data-period="month" aria-pressed="false">Month</button>
+        <button type="button" class="pill on" data-period="week" aria-pressed="true">This week</button>
+        <button type="button" class="pill" data-period="month" aria-pressed="false">This month</button>
       </div>
       <div id="tradeTiles" class="tiles small">
         <div class="tile"><span id="tradeSales" class="tile-num">₦0</span><span class="tile-label">Sales</span></div>
-        <div class="tile"><span id="tradeCash" class="tile-num">₦0</span><span class="tile-label">Cash in</span></div>
+        <div class="tile"><span id="tradeCash" class="tile-num">₦0</span><span class="tile-label">Money in</span></div>
         <div class="tile"><span id="tradeCredit" class="tile-num">₦0</span><span class="tile-label">On credit</span></div>
         <div class="tile"><span id="tradeProfit" class="tile-num">₦0</span><span class="tile-label">Profit</span></div>
       </div>
@@ -159,7 +159,7 @@
       </div>
 
       <div id="biz-stock" class="biz-panel" hidden>
-        <div class="stat-line">Total stock value at cost <b id="stockValue">₦0</b></div>
+        <div class="stat-line">Stock worth (at cost price) <b id="stockValue">₦0</b></div>
         <ul id="stock" class="customers stock"></ul>
       </div>
 
@@ -170,9 +170,9 @@
     </div>
 
     <div class="card">
-      <p class="hint" style="margin:0">Your records are yours.</p>
+      <p class="hint" style="margin:0">Download all your records as a spreadsheet.</p>
       <div class="draft-actions">
-        <button type="button" class="ghost small" id="exportBtn">Download my records</button>
+        <button type="button" class="ghost small" id="exportBtn">Download records</button>
         <button id="resetBtn" class="ghost small" title="Put the sample shop back as it started">Reset sample shop</button>
       </div>
     </div>
@@ -207,9 +207,9 @@
 <dialog id="custDlg" class="receipt"><div id="custBody"></div><form method="dialog"><button class="ghost">Close</button></form></dialog>
 
 <footer class="real">
-  <strong>What is real here:</strong> the voice conversation is live AssemblyAI (Voice Agent API: speech recognition, reasoning and speech).
-  The shop, customers and prices are sample data kept in your browser only. Every total is worked out by the app's code, never by the AI, and nothing is saved until you say yes.
-  <br><a href="/proof.html"><b>See the proof:</b> the same voice heard by AssemblyAI with and without this shop's words</a>.
+  <strong>What's real:</strong> the voice is live AssemblyAI. It listens, understands and talks back.
+  The shop and its customers are sample data, saved only in your browser. The app does all the maths, not the AI, and nothing is saved until you say yes.
+  <br><a href="/proof.html"><b>See the proof:</b> how key terms help AssemblyAI hear Nigerian names</a>
 </footer>
 
 </div>
