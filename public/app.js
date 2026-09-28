@@ -28,19 +28,13 @@ function load() {
 
 const TRIES = [
   "Two bags of rice, three thousand each, to Musa",
-  "Chinedu paid thirteen thousand",
-  "How much does Emeka owe?",
-  "Sell one carton of Indomie to Aisha, she paid five thousand",
-  "Musa paid seven thousand",
-  "How much I make today?",
-  "Remind Emeka",
   "Chinedu don pay 5k",
-  "Add 20 bags of rice, I buy am 2,800 each from Alhaji Sule",
-  "How many Indomie remain?",
-  "New product: Milo tin, sell 2,000",
-  "Rice now 3,200",
-  "I spend 2,000 on transport",
-  "Sell 2 sugar to Blessing, she paid by transfer, give am 300 off",
+  "How much does Emeka owe?",
+  "Who owe me?",
+  "How was this week?",
+  "Remind Emeka",
+  "Add 20 bags of rice from Alhaji Sule",
+  "Undo that",
 ];
 
 let partialYou = null, partialAgent = null;

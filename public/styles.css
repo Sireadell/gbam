@@ -98,6 +98,7 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: v
 .type { display: flex; gap: 8px; }
 .type input { flex: 1; min-width: 0; font: inherit; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--card); color: var(--ink); }
+.tries-label { font-size: 13px; color: var(--muted); margin-bottom: -6px; }
 .tries { display: flex; flex-wrap: wrap; gap: 6px; }
 .tries button { font-size: 13px; border: 1px dashed var(--line); background: transparent; color: var(--muted); border-radius: 99px; padding: 5px 10px; }
 .tries button:hover { color: var(--ink); border-color: var(--muted); }
