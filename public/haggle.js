@@ -28,8 +28,8 @@ async function token() {
 function draw() {
   const order = [];
   $("#lines").innerHTML = lines.length ? lines.map(l => {
-    if (!order.includes(l.speaker)) order.push(l.speaker);
-    return `<div class="line ${order.indexOf(l.speaker) % 2 ? "b" : "a"}"><div class="who">Voice ${esc(l.speaker || "?")}</div><div class="say">${esc(l.text)}</div></div>`;
+    if (l.speaker !== "PENDING" && !order.includes(l.speaker)) order.push(l.speaker);
+    return `<div class="line ${order.indexOf(l.speaker) % 2 ? "b" : "a"}"><div class="who">${l.speaker && l.speaker !== "PENDING" ? "Voice " + esc(l.speaker) : "..."}</div><div class="say">${esc(l.text)}</div></div>`;
   }).join("") : "<span class='status'>Listening...</span>";
 }
 
@@ -51,8 +51,14 @@ async function start() {
   const done = new Promise(res => {
     ws.onmessage = ev => {
       const m = JSON.parse(ev.data);
+      // Speakers first arrive as PENDING, then AssemblyAI sends the real label as a revision.
+      if (m.type === "SpeakerRevision") {
+        for (const r of m.revisions || []) if (turns[r.turn_order]) turns[r.turn_order].speaker = r.speaker_label;
+        lines = Object.keys(turns).sort((a, b) => a - b).map(k => turns[k]).filter(t => t.text);
+        draw();
+      }
       if (m.type === "Turn") {
-        turns[m.turn_order] = { speaker: m.speaker_label || "", text: m.transcript || m.utterance || "" };
+        turns[m.turn_order] = { speaker: m.speaker_label || turns[m.turn_order]?.speaker || "", text: m.transcript || m.utterance || "" };
         lines = Object.keys(turns).sort((a, b) => a - b).map(k => turns[k]).filter(t => t.text);
         draw();
       }
