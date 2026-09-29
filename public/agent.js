@@ -59,6 +59,15 @@ Earlier chat with this owner (from a previous session, only so you know who and 
 ${said}`;
 }
 
+// A sale or payment was read back but not yet confirmed when the last session
+// ended. The new session must know, so a "yes" saves it instead of vanishing.
+function pendingNote(draft) {
+  if (!draft?.say) return "";
+  return `
+
+A draft is waiting for the owner's answer. It was already read back to them: "${draft.say}" If they say yes, call confirm_draft. If they correct it, draft again. If they say cancel, call cancel_draft. Do not start a new draft until this one is answered.`;
+}
+
 const TOOLS = [
   { type: "function", name: "draft_sale",
     description: "Prepare a sale so the owner can confirm it. Call once you have heard every product with its quantity, and the customer's name or that it was a cash walk-in. The tool does all the maths and returns the exact sentence to read back. It does not save anything.",
@@ -177,8 +186,8 @@ export class ShopAgent {
   sessionConfig() {
     const st = this.store.state;
     return {
-      system_prompt: systemPrompt(st.shop, this.store.memory),
-      greeting: this.store.memory?.customer ? `Welcome back. We were on ${this.store.memory.customer}. Tell me a sale or a payment.` : "I'm listening. Tell me a sale or a payment.",
+      system_prompt: systemPrompt(st.shop, this.store.memory) + pendingNote(this.draft),
+      greeting: this.draft?.say ? `I still have this waiting. ${this.draft.say}` : this.store.memory?.customer ? `Welcome back. We were on ${this.store.memory.customer}. Tell me a sale or a payment.` : "I'm listening. Tell me a sale or a payment.",
       tools: TOOLS,
       input: {
         keyterms: shopKeyterms(st),
