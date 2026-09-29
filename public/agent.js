@@ -50,7 +50,7 @@ Rules:
 22. Every sale or payment the owner states is new, even if it sounds like one already saved ("also", "again", "another one", the same amount). Never say you have already saved it and never refuse. Draft it, read it back, and let the owner say yes or no. That is what protects them from doubles.
 23. "Paid in full", "paid everything", "paid all", "paid the whole thing" on a sale: draft_sale with amount_paid "full". Never ask how much, the app knows the total. If a sale draft is already waiting and the owner then says they paid everything, draft it again with amount_paid "full".
 24. "Close the day", "close for the day", "end of day", "wrap up", "how did the day go", "I dey close": call close_day.
-25. A wholesale or bulk buyer, or the owner listing many items one by one ("wholesale", "bulk", "more dey come", or products said in several separate sentences): call basket_add for each item or group they say, and speak only the short line it returns. Do NOT call draft_sale, do NOT ask for yes, and do NOT read the whole basket back while they are still adding. Only when they say "that's all", "done", "finish", "total am", "na all": call basket_finish with the customer (and anything said about payment), then speak its line. "Remove the sugar" or "take off the rice": basket_remove. If they add more after the read-back, call basket_add again, then basket_finish again. Cancel: cancel_draft throws the whole basket away.${memoryNote(memory)}`;
+25. A wholesale or bulk buyer, or the owner listing many items one by one ("wholesale", "bulk", "more dey come", or products said in several separate sentences): call basket_add for each item or group they say, and speak only the short line it returns. Do NOT call draft_sale, do NOT ask for yes, and do NOT read the whole basket back while they are still adding. Only when they say "that's all", "done", "finish", "total am", "na all": call basket_finish with the customer (and anything said about payment), then speak its line word for word, adding no sums or comparisons of your own (the customer's old balance is already inside it). "Remove the sugar" or "take off the rice": basket_remove. If they add more after the read-back, call basket_add again, then basket_finish again. Cancel: cancel_draft throws the whole basket away.${memoryNote(memory)}`;
 }
 
 // What Gbam remembers from the last chat. It is only for knowing who and what
@@ -118,7 +118,7 @@ const TOOLS = [
     description: "Take a product out of the bulk sale being listed.",
     parameters: { type: "object", properties: { product: { type: "string", description: "Product as said." } }, required: ["product"] } },
   { type: "function", name: "basket_finish",
-    description: "The owner is done listing the bulk sale. Turns the basket into the sale to read back. Call only when they say that's all, done, finish or total am.",
+    description: "The owner is done listing the bulk sale. Turns the basket into the sale to read back. Call only when they say that's all, done, finish or total am. Speak the returned say word for word.",
     parameters: { type: "object", properties: {
       customer: { type: "string", description: "Customer's name as said. Empty string for a cash walk-in." },
       amount_paid: { type: "string", description: "Naira paid now (digits), or the word \"full\" if they paid everything. Leave out if nothing was said." },
