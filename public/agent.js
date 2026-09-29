@@ -3,7 +3,7 @@
 // for, and the tools it must use to touch the books. The books never trust
 // the model with a number: tools compute everything and return the sentence
 // to read back.
-import { dailyClose, draftSale, draftPayment, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms, summary, periodStart, debtors, spoken, inWords } from "./ledger.js";
+import { basketAdd, basketRemove, basketFinish, dailyClose, draftSale, draftPayment, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms, summary, periodStart, debtors, spoken, inWords } from "./ledger.js";
 
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
 const YES = /\b(gbam|yes|yeah|yep|yup|ehen|correct|confirm(ed)?|save( it| am)?|ok(ay)?|al{1,2} ?right|fine|proceed|do it|go ahead|do am|sure|true|right|that'?s right|na so|e correct|e good|e dey (ok|okay|fine|correct)|oya)\b/i;
@@ -49,7 +49,8 @@ Rules:
 21. If the owner says "he", "she" or "him" and you do not know from this conversation which customer they mean, ask "Which customer?" and nothing else. If the earlier chat below names the last customer, use that customer.
 22. Every sale or payment the owner states is new, even if it sounds like one already saved ("also", "again", "another one", the same amount). Never say you have already saved it and never refuse. Draft it, read it back, and let the owner say yes or no. That is what protects them from doubles.
 23. "Paid in full", "paid everything", "paid all", "paid the whole thing" on a sale: draft_sale with amount_paid "full". Never ask how much, the app knows the total. If a sale draft is already waiting and the owner then says they paid everything, draft it again with amount_paid "full".
-24. "Close the day", "close for the day", "end of day", "wrap up", "how did the day go", "I dey close": call close_day.${memoryNote(memory)}`;
+24. "Close the day", "close for the day", "end of day", "wrap up", "how did the day go", "I dey close": call close_day.
+25. A wholesale or bulk buyer, or the owner listing many items one by one ("wholesale", "bulk", "more dey come", or products said in several separate sentences): call basket_add for each item or group they say, and speak only the short line it returns. Do NOT call draft_sale, do NOT ask for yes, and do NOT read the whole basket back while they are still adding. Only when they say "that's all", "done", "finish", "total am", "na all": call basket_finish with the customer (and anything said about payment), then speak its line. "Remove the sugar" or "take off the rice": basket_remove. If they add more after the read-back, call basket_add again, then basket_finish again. Cancel: cancel_draft throws the whole basket away.${memoryNote(memory)}`;
 }
 
 // What Gbam remembers from the last chat. It is only for knowing who and what
@@ -70,6 +71,13 @@ function pendingNote(draft) {
   return `
 
 A draft is waiting for the owner's answer. It was already read back to them: "${draft.say}" If they say yes, call confirm_draft. If they correct it, draft again. If they say cancel, call cancel_draft. Do not start a new draft until this one is answered.`;
+}
+
+function basketNote(basket) {
+  if (!basket?.items?.length) return "";
+  return `
+
+A bulk sale is being built: ${basket.items.length} items so far${basket.customer ? ` for ${basket.customer}` : ""}. Keep using basket_add for more items. Do not ask for yes until the owner says they are done, then call basket_finish.`;
 }
 
 const TOOLS = [
@@ -95,6 +103,29 @@ const TOOLS = [
       amount: { type: "number", description: "Naira paid, e.g. 5000." },
       add_new_customer: { type: "boolean", description: "True only after the owner confirmed this is a new customer." } },
       required: ["customer", "amount"] } },
+  { type: "function", name: "basket_add",
+    description: "Add items to a bulk (wholesale) sale that is still being listed. Use this instead of draft_sale whenever the owner is listing many items one by one. Returns a short line to speak. Saves nothing and needs no yes.",
+    parameters: { type: "object", properties: {
+      customer: { type: "string", description: "Customer's name, only if the owner said it." },
+      items: { type: "array", description: "The products just said.", items: { type: "object", properties: {
+        product: { type: "string", description: "Product as said, e.g. 'rice'." },
+        quantity: { type: "number", description: "How many units." },
+        unit_price: { type: "number", description: "Naira per unit ONLY if the owner said a price." } },
+        required: ["product", "quantity"] } },
+      price_confirmed: { type: "boolean", description: "True only after the tool said a price looked wrong and the owner repeated the same price." } },
+      required: ["items"] } },
+  { type: "function", name: "basket_remove",
+    description: "Take a product out of the bulk sale being listed.",
+    parameters: { type: "object", properties: { product: { type: "string", description: "Product as said." } }, required: ["product"] } },
+  { type: "function", name: "basket_finish",
+    description: "The owner is done listing the bulk sale. Turns the basket into the sale to read back. Call only when they say that's all, done, finish or total am.",
+    parameters: { type: "object", properties: {
+      customer: { type: "string", description: "Customer's name as said. Empty string for a cash walk-in." },
+      amount_paid: { type: "string", description: "Naira paid now (digits), or the word \"full\" if they paid everything. Leave out if nothing was said." },
+      payment_method: { type: "string", enum: ["cash", "transfer", "pos"], description: "Only if said." },
+      discount: { type: "number", description: "Naira off the whole sale, only if given." },
+      add_new_customer: { type: "boolean", description: "True only after the owner confirmed this is a new customer." } },
+      required: ["customer"] } },
   { type: "function", name: "confirm_draft",
     description: "Save the sale or payment that was just read back. Call only immediately after the owner clearly said yes to it.",
     parameters: { type: "object", properties: {} } },
@@ -175,12 +206,18 @@ function whoOwesSay(state) {
   return `${who}${lead}${lines.join("; ")}.`;
 }
 
+const BASKET_KEY = "pkv-basket-v1";
+function loadBasket() {
+  try { const b = JSON.parse(localStorage.getItem(BASKET_KEY)); return b?.items?.length ? b : null; } catch { return null; }
+}
+
 export class ShopAgent {
   constructor({ store, on }) {
     this.store = store;      // { state, save() }
     this.on = on;            // UI callbacks
     this.ws = null;
     this.draft = null;
+    this.basket = loadBasket();
     this.lastUser = "";
     this.lastEvent = null;
     this.pending = [];
@@ -190,8 +227,8 @@ export class ShopAgent {
   sessionConfig() {
     const st = this.store.state;
     return {
-      system_prompt: systemPrompt(st.shop, this.store.memory) + pendingNote(this.draft),
-      greeting: this.draft?.say ? `I still have this waiting. ${this.draft.say}` : this.store.memory?.customer ? `Welcome back. We were on ${this.store.memory.customer}. Tell me a sale or a payment.` : "I'm listening. Tell me a sale or a payment.",
+      system_prompt: systemPrompt(st.shop, this.store.memory) + pendingNote(this.draft) + basketNote(this.basket),
+      greeting: this.basket?.items?.length ? `The bulk sale is still open with ${this.basket.items.length} items. Keep adding, or say that's all.` : this.draft?.say ? `I still have this waiting. ${this.draft.say}` : this.store.memory?.customer ? `Welcome back. We were on ${this.store.memory.customer}. Tell me a sale or a payment.` : "I'm listening. Tell me a sale or a payment.",
       tools: TOOLS,
       input: {
         keyterms: shopKeyterms(st),
@@ -301,7 +338,7 @@ export class ShopAgent {
     this.idleTimer = setTimeout(() => {
       this.endReason = "Hung up after a quiet spell, to save cost. Tap to talk again.";
       this.stop();
-    }, this.draft ? 90000 : 45000);
+    }, this.draft || this.basket?.items?.length ? 90000 : 45000);
   }
 
   handle(m) {
@@ -370,6 +407,21 @@ export class ShopAgent {
       this.on.draft(this.draft);
       return { ok: true, say: r.draft.say };
     }
+    if (name === "basket_add") {
+      // Adding to a finished basket reopens it, so "and add one more" works after the read-back.
+      if (!this.basket && this.draft?.basket) { this.basket = this.draft.basket; this.draft = null; this.on.draft(null); }
+      const r = basketAdd(st, this.basket, args);
+      if (!r.ok) return { ok: false, error: r.error };
+      this.setBasket(r.basket);
+      return { ok: true, say: r.say };
+    }
+    if (name === "basket_remove") {
+      const r = basketRemove(st, this.basket, args.product);
+      if (!r.ok) return { ok: false, error: r.error };
+      this.setBasket(r.basket.items.length ? r.basket : null);
+      return { ok: true, say: r.say };
+    }
+    if (name === "basket_finish") return this.finishBasket(args);
     if (name === "confirm_draft") {
       if (!this.draft) return { ok: false, error: "There is nothing waiting to be saved. Ask what they want to record." };
       // The owner's own words decide, not the model's reading of them.
@@ -378,7 +430,7 @@ export class ShopAgent {
       return { ok: true, say: this.save() };
     }
     if (name === "cancel_draft") {
-      this.draft = null; this.on.draft(null);
+      this.draft = null; this.on.draft(null); this.setBasket(null);
       return { ok: true, say: "Cancelled, nothing saved." };
     }
     if (name === "undo_last") return this.undo();
@@ -418,6 +470,7 @@ export class ShopAgent {
     const { receipt, say } = commit(this.store.state, this.draft);
     this.store.save();
     this.draft = null;
+    this.setBasket(null);
     this.on.draft(null);
     this.on.saved(receipt);
     // A new customer's or product's name joins the words AssemblyAI listens for, at once.
@@ -433,6 +486,35 @@ export class ShopAgent {
     return { ok: true, say: r.say };
   }
 
+  // The bulk sale being listed. Kept in the browser so a refresh or a hang-up does not lose 30 items.
+  setBasket(b) {
+    this.basket = b && b.items?.length ? b : null;
+    try { this.basket ? localStorage.setItem(BASKET_KEY, JSON.stringify(this.basket)) : localStorage.removeItem(BASKET_KEY); } catch {}
+    this.on.basket?.(this.basket);
+  }
+
+  finishBasket(args) {
+    const r = basketFinish(this.store.state, this.basket, args);
+    if (!r.ok) return { ok: false, error: r.error };
+    this.draft = r.draft;
+    this.on.draft(this.draft);
+    return { ok: true, say: r.draft.say };
+  }
+
+  // The Done button on the basket card.
+  finishFromScreen() {
+    const customer = this.basket?.customer || "";
+    const r = basketFinish(this.store.state, this.basket, { customer });
+    if (!r.ok) {
+      if (this.ready) this.send({ type: "reply.create", instructions: `Say exactly: "${customer ? r.error : "Who is this sale for, or is it a cash walk-in?"}"` });
+      return r;
+    }
+    this.draft = r.draft;
+    this.on.draft(this.draft);
+    if (this.ready) this.send({ type: "reply.create", instructions: `Say exactly: "${r.draft.say}"` });
+    return r;
+  }
+
   // The Confirm button on screen does the same save, then has the agent say it.
   confirmFromScreen() {
     if (!this.draft) return;
@@ -444,7 +526,7 @@ export class ShopAgent {
   }
 
   cancelFromScreen() {
-    this.draft = null; this.on.draft(null);
+    this.draft = null; this.on.draft(null); this.setBasket(null);
     if (this.ready) this.send({ type: "conversation.message", role: "system", content: "The owner cancelled the draft on screen. Nothing was saved." });
   }
 

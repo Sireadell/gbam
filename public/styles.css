@@ -210,3 +210,8 @@ a.primary { text-decoration: none; display: inline-block; }
 #micBtn, #fabMic { touch-action: manipulation; }
 
 .mic.muted, #fabMic.muted { background: var(--muted); box-shadow: none; animation: none; }
+
+#basketBody { max-height: 38vh; overflow-y: auto; }
+#basketBody table { width: 100%; border-collapse: collapse; font-size: 14px; }
+#basketBody td { padding: 3px 0; }
+#basketBody .hint { font-size: 13px; opacity: .75; margin-top: 6px; }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo, todaySummary, reminder, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, summary, periodStart, debtors, seedHistory, demoState } from "../public/ledger.js";
+import { basketAdd, basketRemove, basketFinish, basketView, freshState, draftSale, draftPayment, commit, balanceOf, bestMatch, shopKeyterms, inWords, undo, todaySummary, reminder, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, summary, periodStart, debtors, seedHistory, demoState } from "../public/ledger.js";
 
 const bal = (s, name) => balanceOf(s.customers.find(c => c.name === name)).balance;
 
@@ -439,4 +439,41 @@ test("'paid in full' wordings are recognised, and unrelated talk is not", async 
     assert.ok(PAID_IN_FULL.test(t), "should match: " + t);
   for (const t of ["Aisha bought garri", "Chinedu don pay 5k", "Musa will pay later", "how much does Aisha owe"])
     assert.ok(!PAID_IN_FULL.test(t), "should not match: " + t);
+});
+
+test("bulk basket: 25 items added one by one, one read-back at the end", () => {
+  const s = demoState();
+  let basket = null, total = 0;
+  const names = ["rice", "sugar", "Indomie", "garri", "Peak milk"];
+  for (let i = 0; i < 25; i++) {
+    const r = basketAdd(s, basket, { customer: i === 0 ? "Musa" : "", items: [{ product: names[i % 5], quantity: 1 }] });
+    assert.ok(r.ok, r.error);
+    assert.ok(!/say yes/i.test(r.say), "no yes while the basket fills");
+    basket = r.basket; total = r.total;
+  }
+  assert.equal(basket.items.length, 25);
+  assert.equal(basket.customer, "Musa");
+  const before = s.receipts.length;
+  const f = basketFinish(s, basket, { customer: "Musa", amount_paid: "full" });
+  assert.ok(f.ok, f.error);
+  assert.equal(f.draft.total, total);
+  assert.match(f.draft.say, /25 items/);
+  assert.equal(f.draft.lines.length, 25);
+  assert.equal(s.receipts.length, before, "nothing saved before yes");
+  commit(s, f.draft);
+  assert.equal(s.receipts.length, before + 1);
+  assert.equal(s.receipts[0].lines.length, 25);
+});
+
+test("bulk basket: a bad item is refused and the basket stays as it was", () => {
+  const s = demoState();
+  const a = basketAdd(s, null, { items: [{ product: "rice", quantity: 2 }] });
+  const bad = basketAdd(s, a.basket, { items: [{ product: "spaceship", quantity: 1 }] });
+  assert.equal(bad.ok, false);
+  assert.match(bad.error, /Nothing was added/);
+  const rm = basketRemove(s, a.basket, "rice");
+  assert.ok(rm.ok);
+  assert.equal(rm.basket.items.length, 0);
+  assert.equal(basketRemove(s, a.basket, "sugar").ok, false);
+  assert.equal(basketFinish(s, null, { customer: "Musa" }).ok, false);
 });

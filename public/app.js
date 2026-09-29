@@ -1,4 +1,4 @@
-import { freshState, demoState, balanceOf, naira, shopKeyterms, reminder, summary, periodStart, debtors, receiptText, dailyClose } from "./ledger.js";
+import { freshState, demoState, balanceOf, naira, shopKeyterms, reminder, summary, periodStart, debtors, receiptText, dailyClose, basketView } from "./ledger.js";
 import { ShopAgent } from "./agent.js";
 
 const KEY = "pkv-shop-v1";
@@ -88,6 +88,7 @@ const agent = new ShopAgent({
     user: (text, final) => { partialYou = bubble("you", "You", text, final, partialYou); if (final) remember("you", "You", text); },
     agent: (text, final) => { partialAgent = bubble("agent", "Gbam", text, final, partialAgent); if (final) remember("agent", "Gbam", text); },
     draft: d => { renderDraft(d); if (d) bringTalk(); },
+    basket: b => { renderBasket(b); if (b) bringTalk(); },
     saved: r => { renderAll(); if (r.customer) flash(r.customer); },
     focus: name => { flash(name); store.memory.customer = name; store.saveMemory(); showMemory(); },
     tool: logTool,
@@ -233,6 +234,20 @@ function bubble(cls, who, text, final, el) {
   log.scrollTop = log.scrollHeight;
   return final ? null : el;
 }
+
+// ---------- bulk basket: items pile up here, no yes needed until Done ----------
+
+function renderBasket(b) {
+  $("#basket").hidden = !b?.items?.length;
+  if (!b?.items?.length) return;
+  const v = basketView(store.state, b);
+  $("#basketTitle").textContent = "Bulk sale" + (b.customer ? " for " + b.customer : "") + ", " + v.lines.length + (v.lines.length === 1 ? " line" : " lines");
+  $("#basketBody").innerHTML = "<table>" + v.lines.map(l => `<tr><td>${l.quantity} × ${esc(l.product)}</td><td class="n">${naira(l.unit_price)}</td><td class="n">${naira(l.line_total)}</td></tr>`).join("") +
+    `<tr class="total"><td>So far</td><td></td><td class="n">${naira(v.total)}</td></tr></table><div class="hint">Keep saying items. Say "that's all" when done.</div>`;
+  $("#basketBody").scrollTop = $("#basketBody").scrollHeight;
+}
+$("#basketDone").onclick = () => agent.finishFromScreen();
+$("#basketClear").onclick = () => agent.setBasket(null);
 
 // ---------- draft ----------
 
@@ -549,7 +564,7 @@ $("#resetBtn").onclick = () => {
   clearTimeout(armed); armed = null;
   $("#resetBtn").textContent = "Reset sample shop";
   store.state = demoState(); store.save(); store.forget(); showMemory();
-  agent.draft = null; renderDraft(null); renderAll();
+  agent.draft = null; agent.setBasket(null); renderDraft(null); renderAll();
   if (agent.ready) agent.send({ type: "session.update", session: { input: { keyterms: shopKeyterms(store.state) } } });
 };
 
@@ -558,5 +573,6 @@ window.addEventListener("pagehide", () => { if (agent.ws?.readyState === 1) agen
 $("#memForget").onclick = () => { store.forget(); showMemory(); renderAll(); };
 showTab(tabFromHash() || "talk", { skipHash: true });
 renderAll();
+renderBasket(agent.basket);
 showMemory();
 route();

@@ -242,7 +242,7 @@ export function draftSale(state, args) {
 
   const before = customer ? balanceOf(customer).balance : 0;
   const after = round2(before + total - paid);
-  const list = lines.map(l => `${l.say} at ${inWords(l.unit_price)}`).join(", ");
+  const list = args.brief && lines.length > 6 ? `${lines.length} items` : lines.map(l => `${l.say} at ${inWords(l.unit_price)}`).join(", ");
   let say = discount ? `${list}. Less ${inWords(discount)} discount, total ${spoken(total)}.` : `${list}. Total ${spoken(total)}.`;
   if (customer) {
     if (paid > 0) say += ` Paid ${spoken(paid)}${method !== "cash" ? " by " + METHOD_WORDS[method] : ""}.`;
@@ -259,6 +259,51 @@ export function draftSale(state, args) {
   if (warn.length) say = warn.join(" ") + " " + say;
 
   return { ok: true, draft: { kind: "sale", customer: customer ? customer.name : null, isNew, lines, gross, discount, total, paid, method, before, after, say } };
+}
+
+// ---------- basket: a wholesale buyer with many items, added one by one ----------
+// Nothing is asked or saved while the basket fills. Finishing it makes the usual sale draft.
+
+function basketItems(args) {
+  return Array.isArray(args.items) ? args.items : args.items && typeof args.items === "object" ? [args.items] : [];
+}
+
+export function basketView(state, basket) {
+  if (!basket?.items?.length) return { lines: [], total: 0 };
+  const r = draftSale(state, { customer: "", items: basket.items, price_confirmed: true });
+  return r.ok ? { lines: r.draft.lines, total: r.draft.total } : { lines: [], total: 0 };
+}
+
+const lineWord = n => `${n} ${n === 1 ? "line" : "lines"}`;
+
+export function basketAdd(state, basket, args) {
+  const items = basketItems(args);
+  if (!items.length) return fail("No products given. Ask what to add.");
+  const r = draftSale(state, { customer: "", items, price_confirmed: args.price_confirmed });
+  if (!r.ok) return fail(r.error.replace("Could not prepare the sale", "Could not add that") + " Nothing was added.");
+  const next = { customer: String(args.customer || "").trim() || basket?.customer || "", items: [...(basket?.items || []), ...items] };
+  const v = basketView(state, next);
+  return { ok: true, basket: next, lines: v.lines, total: v.total,
+    say: `Added ${r.draft.lines.map(l => l.say).join(", ")}. ${lineWord(v.lines.length)}, ${spoken(v.total)} so far.` };
+}
+
+export function basketRemove(state, basket, product) {
+  const key = it => bestMatch(state.products, it.product, ["name", "say"]).match?.name || norm(it.product);
+  const want = bestMatch(state.products, product, ["name", "say"]).match?.name || norm(product);
+  const items = (basket?.items || []).filter(it => key(it) !== want);
+  if (!basket?.items?.length || items.length === basket.items.length) return fail(`There is no '${product}' in the basket.`);
+  const next = { customer: basket.customer, items };
+  const v = basketView(state, next);
+  return { ok: true, basket: next, lines: v.lines, total: v.total,
+    say: items.length ? `Removed ${product}. ${lineWord(v.lines.length)}, ${spoken(v.total)} so far.` : `Removed ${product}. The basket is empty.` };
+}
+
+export function basketFinish(state, basket, args) {
+  if (!basket?.items?.length) return fail("The basket is empty. Ask what to add.");
+  const r = draftSale(state, { ...args, customer: String(args.customer || "").trim() || basket.customer || "", items: basket.items, brief: true, price_confirmed: true });
+  if (!r.ok) return r;
+  r.draft.basket = { customer: basket.customer, items: basket.items };
+  return r;
 }
 
 export function draftPayment(state, args) {
