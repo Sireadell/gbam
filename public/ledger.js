@@ -276,8 +276,41 @@ export function commit(state, draft, now = new Date()) {
     total: draft.total ?? null, paid: draft.kind === "sale" ? draft.paid : draft.amount, before: draft.before, after,
     discount: draft.discount || 0, method: draft.method || "cash", profit: draft.kind === "sale" ? saleProfit(draft) : null };
   state.receipts.unshift(receipt);
-  const say = `Saved, receipt ${inWords(state.seq)}.${customer ? " " + cap(standingText(customer.name, after)) + "." : ""}`;
+  let say = `Saved, receipt ${inWords(state.seq)}.${customer ? " " + cap(standingText(customer.name, after)) + "." : ""}`;
+  if (draft.kind === "sale") say += lowStockNote(state, draft.lines);
   return { receipt, say };
+}
+
+// After a sale: warn if something just sold is nearly gone.
+export const LOW_STOCK = 5;
+export function lowStockNote(state, lines) {
+  const seen = new Set(), out = [];
+  for (const l of lines) {
+    const p = state.products.find(x => x.name === l.product);
+    if (!p || seen.has(p.name) || p.stock > LOW_STOCK) continue;
+    seen.add(p.name);
+    out.push(p.stock === 0 ? `${cap(p.say)} is finished` : `Only ${inWords(p.stock)} ${p.stock === 1 ? p.unit : p.unit + "s"} of ${p.say} left`);
+  }
+  return out.length ? " " + out.join(". ") + "." : "";
+}
+
+// Plain text of a receipt, ready to send to the customer on WhatsApp.
+export function receiptText(state, r) {
+  const day = new Date(r.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const out = [`*${state.shop.name}*`, `Receipt ${r.ref}, ${day}`, ""];
+  if (r.kind === "sale") {
+    for (const l of r.lines) out.push(`${l.quantity} x ${l.product}: ${naira(l.line_total)}`);
+    if (r.discount) out.push(`Discount: ${naira(r.discount)}`);
+    out.push(`*Total: ${naira(r.total)}*`);
+    if (r.customer && r.paid > 0) out.push(`Paid: ${naira(r.paid)}`);
+  } else if (r.kind === "payment") {
+    out.push(`Payment received: ${naira(r.paid)}`);
+  } else return "";
+  if (r.customer) {
+    out.push(r.after > 0 ? `Balance you owe: ${naira(r.after)}` : r.after < 0 ? `Credit with us: ${naira(-r.after)}` : "Your account is settled.");
+  }
+  out.push("", "Thank you!");
+  return out.join("\n");
 }
 
 // Takes a saved receipt back out of the books: its account entries go and

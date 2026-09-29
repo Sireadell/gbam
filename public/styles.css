@@ -200,3 +200,5 @@ a.primary { text-decoration: none; display: inline-block; }
 .memnote { font-size: 13px; color: var(--muted); margin: 6px 0 4px; }
 .linkbtn { background: none; border: 0; padding: 0; color: var(--green); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .msg.old { opacity: .55; }
+
+.sharebtn { display: inline-block; text-decoration: none; padding: 10px 14px; border-radius: 10px; background: var(--green); color: #fff; font-weight: 700; }

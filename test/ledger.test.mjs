@@ -352,3 +352,31 @@ test("undo with no ref does not reach into the seeded history", () => {
   assert.equal(undo(s).ok, true);
   assert.equal(undo(s).ok, false);
 });
+
+test("low stock: selling most of a product warns, plenty left does not", async () => {
+  const { lowStockNote, receiptText } = await import("../public/ledger.js");
+  const s = freshState();
+  const r = draftSale(s, { customer: "Musa", items: [{ product: "Semovita", quantity: 1 }] });
+  const out = commit(s, r.draft);
+  assert.match(out.say, /Only three bags of Semovita left\./);
+  const r2 = draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: 1 }] });
+  assert.doesNotMatch(commit(s, r2.draft).say, /left|finished/);
+  const r3 = draftSale(s, { customer: "Musa", items: [{ product: "Semovita", quantity: 3 }] });
+  assert.match(commit(s, r3.draft).say, /Semovita is finished/);
+  assert.equal(lowStockNote(s, []), "");
+});
+
+test("receipt text for WhatsApp: sale, credit balance, payment, and nothing for a restock", async () => {
+  const { receiptText } = await import("../public/ledger.js");
+  const s = freshState();
+  const r = draftSale(s, { customer: "Musa", amount_paid: 2000, items: [{ product: "rice", quantity: 2, unit_price: 3000 }] });
+  const rec = commit(s, r.draft).receipt;
+  const t = receiptText(s, rec);
+  assert.match(t, /Mama Bisi Provisions/);
+  assert.match(t, /2 x Rice \(50kg bag\): ₦6,000/);
+  assert.match(t, /Paid: ₦2,000/);
+  assert.match(t, /Balance you owe: ₦8,000/);
+  const p = commit(s, draftPayment(s, { customer: "Musa", amount: 8000 }).draft).receipt;
+  assert.match(receiptText(s, p), /Payment received: ₦8,000[\s\S]*Your account is settled/);
+  assert.equal(receiptText(s, { kind: "restock", ts: new Date().toISOString() }), "");
+});

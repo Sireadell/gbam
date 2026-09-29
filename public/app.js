@@ -1,4 +1,4 @@
-import { freshState, demoState, balanceOf, naira, shopKeyterms, reminder, summary, periodStart, debtors } from "./ledger.js";
+import { freshState, demoState, balanceOf, naira, shopKeyterms, reminder, summary, periodStart, debtors, receiptText } from "./ledger.js";
 import { ShopAgent } from "./agent.js";
 
 const KEY = "pkv-shop-v1";
@@ -323,6 +323,8 @@ function showReceiptFromHash() {
   else body += `<tr><td>Spent on ${esc(r.note)}</td><td class="n">${naira(r.total)}</td></tr>`;
   body += `</table>`;
   if (r.customer) body += `<div>${esc(r.customer)}: ${amt(r.after)} after this.</div>`;
+  const share = receiptText(store.state, r);
+  if (share) body += `<p><a class="primary small sharebtn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(share)}">Send receipt on WhatsApp</a></p>`;
   body += `<p><button type="button" class="ghost small" id="undoBtn">Undo this, it was a mistake</button></p>`;
   $("#receiptBody").innerHTML = body;
   let armedUndo = false;
