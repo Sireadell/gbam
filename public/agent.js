@@ -206,6 +206,7 @@ function whoOwesSay(state) {
   return `${who}${lead}${lines.join("; ")}.`;
 }
 
+const DONE = /(that'?s all|thats all|i'?m done|i am done|done|finish(ed)?|total am|na all|that'?s it|e don do)/i;
 const BASKET_KEY = "pkv-basket-v1";
 function loadBasket() {
   try { const b = JSON.parse(localStorage.getItem(BASKET_KEY)); return b?.items?.length ? b : null; } catch { return null; }
@@ -322,6 +323,7 @@ export class ShopAgent {
     this.lastUser = text;
     this.bumpIdle();
     this.on.user(text, true);
+    this.watchDone(text);
     // A bare conversation.message is not seen by the next reply (tested: the
     // agent answered as if nothing was said, and once guessed a sale). The
     // words have to ride in the reply instruction itself.
@@ -349,7 +351,7 @@ export class ShopAgent {
       case "input.speech.started": this.lastEvent = m.type; this.on.hearing(true); break;
       case "input.speech.stopped": this.on.hearing(false); break;
       case "transcript.user.delta": this.on.user(m.text, false); break;
-      case "transcript.user": this.lastUser = m.text; this.on.user(m.text, true); break;
+      case "transcript.user": this.lastUser = m.text; this.on.user(m.text, true); this.watchDone(m.text); break;
       case "reply.started": this.lastEvent = m.type; break;
       case "reply.audio": this.play(m.data); break;
       case "transcript.agent.delta":
@@ -493,6 +495,14 @@ export class ShopAgent {
     this.on.basket?.(this.basket);
   }
 
+  // The owner said they are done listing. If the model has not turned the basket into a sale
+  // a few seconds later, the app does it, so a missed tool call never leaves 20 items hanging.
+  watchDone(text) {
+    if (!this.basket?.items?.length || this.draft || !DONE.test(text) || text.trim().split(/s+/).length > 6) return;
+    clearTimeout(this.doneTimer);
+    this.doneTimer = setTimeout(() => { if (this.basket?.items?.length && !this.draft) this.finishFromScreen(); }, 3500);
+  }
+
   finishBasket(args) {
     const r = basketFinish(this.store.state, this.basket, args);
     if (!r.ok) return { ok: false, error: r.error };
@@ -504,6 +514,10 @@ export class ShopAgent {
   // The Done button on the basket card.
   finishFromScreen() {
     const customer = this.basket?.customer || "";
+    if (!customer && this.basket?.items?.length) {
+      if (this.ready) this.send({ type: "reply.create", instructions: `Say exactly: "Who is this sale for, or is it a cash walk-in? Then I will read it back."` });
+      return { ok: false, error: "customer missing" };
+    }
     const r = basketFinish(this.store.state, this.basket, { customer });
     if (!r.ok) {
       if (this.ready) this.send({ type: "reply.create", instructions: `Say exactly: "${customer ? r.error : "Who is this sale for, or is it a cash walk-in?"}"` });
