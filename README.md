@@ -51,7 +51,12 @@ The loop: **the ledger teaches the recogniser** (names and products become key t
 | "I spend 2,000 on transport" | Expense |
 | "How much I make today?" | Sales, cash in, credit, profit and money spent |
 | "Undo that" | Takes the last save back out |
+| "Wholesale for Musa, 3 bags of rice", then more items, then "that's all" | Bulk basket: items pile up with a running total, no yes asked until you finish, then one read-back |
+| "Close the day" | Spoken debrief (sales, money in, who owes, what is low) and a summary to send on WhatsApp |
+| "How much does he owe?" after a refresh | Gbam remembers who you were talking about, never the amounts, which always come from the books |
 | "Yes", "Na so", "Gbam!" | Saves what was read back. Nothing is saved before this |
+
+Also: a WhatsApp receipt for every sale, a low-stock warning after a sale, and **Noisy place** mode (hold the mic while you talk) for loud markets. `/haggle.html` is an early haggle mode that uses AssemblyAI speaker labels to pick the last price said; it is tested on recordings only.
 
 Every record downloads as a spreadsheet file ("Download my records"), so the owner's books never depend on us staying online.
 
