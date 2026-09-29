@@ -46,6 +46,18 @@ export function freshState() {
 
 // ---------- money ----------
 
+// Reads an amount the way a person writes it: 10000, "10,000", "₦10,000",
+// "10k" or "10 thousand" all mean the same. The voice agent sometimes hands
+// over the digits it heard as text, and a plain Number("10,000") is NaN.
+export function num(v) {
+  if (typeof v === "number") return v;
+  const s = String(v ?? "").toLowerCase().replace(/₦|naira|ngn|,/g, "").trim();
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(k|thousand|m|million)?$/);
+  if (!m) return Number(s);
+  const scale = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6 }[m[2]] || 1;
+  return parseFloat(m[1]) * scale;
+}
+
 export function round2(n) { return Math.round(n * 100) / 100; }
 
 export function naira(n) {
@@ -165,11 +177,11 @@ export function draftSale(state, args) {
   if (!items.length) return fail("No products given. Ask what was sold.");
   const lines = [];
   for (const it of items) {
-    const qty = Number(it.quantity);
+    const qty = num(it.quantity);
     if (!(qty > 0)) { errs.push(`quantity for '${it.product}' is missing`); continue; }
     const pm = bestMatch(state.products, it.product, ["name", "say"]);
     let product = pm.match || null;
-    let unit = it.unit_price != null && it.unit_price !== "" ? Number(it.unit_price) : null;
+    let unit = it.unit_price != null && it.unit_price !== "" ? num(it.unit_price) : null;
     if (!product && pm.candidates && unit == null) { errs.push(`product '${it.product}' is unclear, close ones: ${pm.candidates.map(p => p.say).join(", ")}`); continue; }
     if (unit == null) {
       if (!product) { errs.push(`'${it.product}' is not in the stock list, ask its price`); continue; }
@@ -195,10 +207,10 @@ export function draftSale(state, args) {
   if (errs.length) return fail(`Could not prepare the sale: ${errs.join("; ")}. ${lines.length ? `Understood so far: ${lines.map(l => l.say).join(", ")}.` : ""} Ask only for what is missing.`);
 
   const gross = round2(lines.reduce((s, l) => s + l.line_total, 0));
-  const discount = Number(args.discount) > 0 ? round2(Number(args.discount)) : 0;
+  const discount = num(args.discount) > 0 ? round2(num(args.discount)) : 0;
   if (discount >= gross) return fail(`A discount of ${spoken(discount)} is more than the sale itself (${spoken(gross)}). Ask the owner for the discount again.`);
   const total = round2(gross - discount);
-  const paid = args.amount_paid != null && args.amount_paid !== "" ? Number(args.amount_paid) : (customer ? 0 : total);
+  const paid = args.amount_paid != null && args.amount_paid !== "" ? num(args.amount_paid) : (customer ? 0 : total);
   const method = paymentMethod(args.payment_method);
   if (!(paid >= 0)) return fail("amount_paid is not a number. Ask how much was paid.");
   if (!customer && paid < total) return fail(`A sale with no customer name must be paid in full (${spoken(total)}). Ask who the customer is, so the rest can go on their account.`);
@@ -226,7 +238,7 @@ export function draftSale(state, args) {
 
 export function draftPayment(state, args) {
   const heardName = String(args.customer || "").trim();
-  const amount = Number(args.amount);
+  const amount = num(args.amount);
   if (!(amount > 0)) return fail("Payment amount is missing. Ask how much was paid.");
   const m = bestMatch(state.customers, heardName, ["name"]);
   let customer = m.match, isNew = false;
@@ -584,14 +596,14 @@ function findProduct(state, heard) {
 // "Add 20 bags of rice, I bought at 2,500 each": stock goes up, and the
 // buying price becomes the average of old and new stock.
 export function draftRestock(state, args) {
-  const qty = Number(args.quantity);
+  const qty = num(args.quantity);
   if (!(qty > 0)) return fail("How many were added is missing. Ask the quantity.");
   const f = findProduct(state, args.product);
   if (!f.product) return f;
   const p = f.product;
   // No price said: the owner means the usual buying price already saved.
   const said = args.unit_cost != null && args.unit_cost !== "";
-  const unitCost = said ? Number(args.unit_cost) : p.cost ?? null;
+  const unitCost = said ? num(args.unit_cost) : p.cost ?? null;
   if (unitCost != null && !(unitCost > 0)) return fail("The buying price is not a number. Ask what they paid for each.");
   if (unitCost != null && !args.price_confirmed && p.cost && (unitCost < p.cost / 4 || unitCost > p.cost * 4))
     return fail(`The buying price ${spoken(unitCost)} for ${p.say} looks wrong (last time ${spoken(p.cost)}). Ask the owner to say it again, then call again with price_confirmed true if they repeat it.`);
@@ -618,14 +630,14 @@ export function autoPrice(cost) {
 export function draftNewProduct(state, args) {
   const name = String(args.name || "").trim();
   if (!name) return fail("The product name is missing. Ask for it.");
-  const cost = Number(args.unit_cost) > 0 ? Number(args.unit_cost) : null;
+  const cost = num(args.unit_cost) > 0 ? num(args.unit_cost) : null;
   // Only the buying price said: sell at the shop's usual markup (6 to 7%).
-  const auto = !(Number(args.sell_price) > 0) && cost != null;
-  const price = auto ? autoPrice(cost) : Number(args.sell_price);
+  const auto = !(num(args.sell_price) > 0) && cost != null;
+  const price = auto ? autoPrice(cost) : num(args.sell_price);
   if (!(price > 0)) return fail("The price is missing. Ask what they bought it for (the selling price is then set automatically), or what it sells for.");
   const m = bestMatch(state.products, name, ["name", "say"]);
   if (m.match && norm(m.match.say) === norm(name)) return fail(`'${m.match.say}' is already in the stock list. To add more of it use draft_restock; to change its price use draft_price_change.`);
-  const stock = Number(args.quantity) > 0 ? Number(args.quantity) : 0;
+  const stock = num(args.quantity) > 0 ? num(args.quantity) : 0;
   const unit = args.unit ? String(args.unit).trim().toLowerCase() : "";
   const say = `New product ${titleCase(name)}, selling at ${spoken(price)}${auto ? " (your usual markup)" : ""}${unit ? " a " + unit : ""}${cost ? `, bought at ${inWords(cost)}` : ""}${stock ? `, ${stock} in stock` : ""}. Say yes.`;
   // "Milo tin" sold in tins is spoken "2 tins of Milo", not "2 tins of Milo Tin".
@@ -639,7 +651,7 @@ export function draftPriceChange(state, args) {
   const f = findProduct(state, args.product);
   if (!f.product) return f;
   const p = f.product;
-  const price = Number(args.sell_price);
+  const price = num(args.sell_price);
   if (!(price > 0)) return fail("The new price is missing. Ask for it.");
   if (!args.price_confirmed && (price < p.price / 4 || price > p.price * 4))
     return fail(`${spoken(price)} for ${p.say} looks wrong (now ${spoken(p.price)}). Ask the owner to say it again, then call again with price_confirmed true if they repeat it.`);
@@ -649,7 +661,7 @@ export function draftPriceChange(state, args) {
 }
 
 export function draftExpense(state, args) {
-  const amount = Number(args.amount);
+  const amount = num(args.amount);
   if (!(amount > 0)) return fail("The amount spent is missing. Ask how much.");
   const note = String(args.what || "").trim() || "expense";
   return { ok: true, draft: { kind: "expense", note, total: amount, say: `Spent ${spoken(amount)} on ${note}. Say yes.` } };

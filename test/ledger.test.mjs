@@ -399,3 +399,17 @@ test("daily close: totals, who owes, what is low, and a written copy", async () 
   assert.match(d.text, /- Emeka: ₦45,000/);
   assert.doesNotMatch(d.text, /undefined|NaN/);
 });
+
+test("amounts written like a person writes them are understood", async () => {
+  const { num } = await import("../public/ledger.js");
+  for (const v of [10000, "10000", "10,000", "₦10,000", "10k", "10K", "10 thousand", " ₦10,000 naira "]) assert.equal(num(v), 10000, String(v));
+  assert.equal(num("2.5k"), 2500);
+  assert.equal(num("1 million"), 1e6);
+  assert.ok(Number.isNaN(num("lots")));
+  assert.ok(Number.isNaN(num(undefined)) || num(undefined) === 0);
+  const s = freshState();
+  assert.equal(draftPayment(s, { customer: "Emeka", amount: "₦10,000" }).draft.amount, 10000);
+  const r = draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: "2", unit_price: "3,000" }], amount_paid: "2k" });
+  assert.equal(r.draft.total, 6000);
+  assert.equal(r.draft.paid, 2000);
+});
