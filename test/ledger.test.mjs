@@ -432,3 +432,11 @@ test("sloppy tool arguments are still understood", () => {
   assert.equal(draftPayment(s, { customer: "Emeka", amount: "two thousand five hundred" }).draft.amount, 2500);
   assert.match(draftPayment(s, { amount: 1000 }).error, /name is missing/);
 });
+
+test("'paid in full' wordings are recognised, and unrelated talk is not", async () => {
+  const { PAID_IN_FULL } = await import("../public/agent.js");
+  for (const t of ["Aisha bought garri and paid in full.", "She paid everything in full.", "he don pay all", "Musa fully paid", "Tunde paid cash for it", "she paid the whole thing"])
+    assert.ok(PAID_IN_FULL.test(t), "should match: " + t);
+  for (const t of ["Aisha bought garri", "Chinedu don pay 5k", "Musa will pay later", "how much does Aisha owe"])
+    assert.ok(!PAID_IN_FULL.test(t), "should not match: " + t);
+});

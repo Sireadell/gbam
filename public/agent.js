@@ -11,6 +11,9 @@ const NO = /\b(no|not|don'?t|wrong|cancel|wait|stop|change|no be so)\b/i;
 // "no problem", "no wahala", "not bad", "change nothing" sound negative but agree.
 const BENIGN_NO = /\b(no (problem|wahala|worry|worries|doubt|issue|need|change)|not bad|not a problem|change nothing|nothing to change|no be (wahala|problem))\b/gi;
 
+// "paid in full", "paid everything", "she don pay all", "fully paid", "paid cash"
+export const PAID_IN_FULL = /\b(pa(id|y)|don pay)\b[^.?!]{0,25}\b(in full|full|all|everything|whole|cash)\b|\bfully paid\b/i;
+
 // Did the owner clearly agree? A word of agreement, and no real objection.
 export function isYes(text) {
   const t = String(text || "");
@@ -45,7 +48,8 @@ Rules:
 20. Speech recognition often turns Pidgin "X don pay 40k" into "X don't pay 40k". The owner never needs to record a non-payment, so treat "X don't pay 40,000" like "X don pay 40,000": call draft_payment and read it back. The owner will say no if it was wrong.
 21. If the owner says "he", "she" or "him" and you do not know from this conversation which customer they mean, ask "Which customer?" and nothing else. If the earlier chat below names the last customer, use that customer.
 22. Every sale or payment the owner states is new, even if it sounds like one already saved ("also", "again", "another one", the same amount). Never say you have already saved it and never refuse. Draft it, read it back, and let the owner say yes or no. That is what protects them from doubles.
-23. "Close the day", "close for the day", "end of day", "wrap up", "how did the day go", "I dey close": call close_day.${memoryNote(memory)}`;
+23. "Paid in full", "paid everything", "paid all", "paid the whole thing" on a sale: draft_sale with amount_paid "full". Never ask how much, the app knows the total. If a sale draft is already waiting and the owner then says they paid everything, draft it again with amount_paid "full".
+24. "Close the day", "close for the day", "end of day", "wrap up", "how did the day go", "I dey close": call close_day.${memoryNote(memory)}`;
 }
 
 // What Gbam remembers from the last chat. It is only for knowing who and what
@@ -78,7 +82,7 @@ const TOOLS = [
         quantity: { type: "number", description: "How many units, e.g. 2." },
         unit_price: { type: "number", description: "Naira per unit ONLY if the owner said a price, e.g. 3000. Leave out otherwise." } },
         required: ["product", "quantity"] } },
-      amount_paid: { type: "number", description: "Naira the customer paid now, only if said. Leave out if nothing was said about payment." },
+      amount_paid: { type: "string", description: "Naira the customer paid now (digits, like 3000), only if said. If they paid everything (\"paid in full\", \"paid all\", \"paid cash\", \"e don pay\") send the word \"full\": the app works out the amount. Leave out if nothing was said about payment." },
       payment_method: { type: "string", enum: ["cash", "transfer", "pos"], description: "How they paid, only if said. 'transfer' for bank transfer, 'pos' for card or POS." },
       discount: { type: "number", description: "Naira taken off the whole sale, only if the owner gave a discount, e.g. 500." },
       add_new_customer: { type: "boolean", description: "True only after the owner confirmed this is a new customer." },
@@ -357,6 +361,9 @@ export class ShopAgent {
     const drafters = { draft_sale: draftSale, draft_payment: draftPayment, draft_restock: draftRestock,
       draft_new_product: draftNewProduct, draft_price_change: draftPriceChange, draft_expense: draftExpense };
     if (drafters[name]) {
+      // The owner said the customer paid everything, but the agent left the amount out
+      // (it may not do sums). The app knows the total, so it fills it in.
+      if (name === "draft_sale" && (args.amount_paid == null || args.amount_paid === "") && PAID_IN_FULL.test(this.lastUser)) args = { ...args, amount_paid: "full" };
       const r = drafters[name](st, args);
       if (!r.ok) return { ok: false, error: r.error };
       this.draft = r.draft;
