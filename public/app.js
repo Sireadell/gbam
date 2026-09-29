@@ -1,4 +1,4 @@
-import { freshState, demoState, balanceOf, naira, shopKeyterms, reminder, summary, periodStart, debtors, receiptText } from "./ledger.js";
+import { freshState, demoState, balanceOf, naira, shopKeyterms, reminder, summary, periodStart, debtors, receiptText, dailyClose } from "./ledger.js";
 import { ShopAgent } from "./agent.js";
 
 const KEY = "pkv-shop-v1";
@@ -73,6 +73,7 @@ const TRIES = [
   "How was this week?",
   "Remind Emeka",
   "Add 20 bags of rice from Alhaji Sule",
+  "Close the day",
   "Undo that",
 ];
 
@@ -91,6 +92,7 @@ const agent = new ShopAgent({
     focus: name => { flash(name); store.memory.customer = name; store.saveMemory(); showMemory(); },
     tool: logTool,
     reminder: (name, text) => { showReminder(name, text); bringTalk(); },
+    dayClose: text => { showDayClose(text); bringTalk(); },
     ended: reason => setLive(false, reason),
   },
 });
@@ -296,10 +298,18 @@ function showCustomer(name) {
 
 // The owner sends it from their own WhatsApp; the app never sends anything.
 function showReminder(name, text) {
+  $("#remindTitle").textContent = "Reminder ready";
   $("#remindText").textContent = text;
   $("#remindSend").href = "https://wa.me/?text=" + encodeURIComponent(text);
   $("#remind").hidden = false;
 }
+function showDayClose(text) {
+  $("#remindTitle").textContent = "Day closed";
+  $("#remindText").textContent = text;
+  $("#remindSend").href = "https://wa.me/?text=" + encodeURIComponent(text);
+  $("#remind").hidden = false;
+}
+$("#closeDayBtn").onclick = () => { showDayClose(dailyClose(store.state).text); bringTalk(); };
 $("#remindClose").onclick = () => { $("#remind").hidden = true; };
 
 // Receipts have their own link, so a customer can be sent one.

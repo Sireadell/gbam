@@ -380,3 +380,22 @@ test("receipt text for WhatsApp: sale, credit balance, payment, and nothing for 
   assert.match(receiptText(s, p), /Payment received: ₦8,000[\s\S]*Your account is settled/);
   assert.equal(receiptText(s, { kind: "restock", ts: new Date().toISOString() }), "");
 });
+
+test("daily close: totals, who owes, what is low, and a written copy", async () => {
+  const { dailyClose } = await import("../public/ledger.js");
+  const s = freshState();
+  const quiet = dailyClose(s);
+  assert.match(quiet.say, /Nothing recorded today yet\./);
+  assert.match(quiet.say, /Running low: .*Semovita, 4 left/);
+  assert.match(quiet.text, /Nothing recorded today\./);
+  const r = draftSale(s, { customer: "Musa", amount_paid: 2000, items: [{ product: "rice", quantity: 2, unit_price: 3000 }] });
+  commit(s, r.draft);
+  const d = dailyClose(s);
+  assert.match(d.say, /Today: 1 sale, six thousand naira\. Money in, two thousand naira\./);
+  assert.match(d.say, /people owe you/);
+  assert.match(d.text, /Sales: 1, ₦6,000/);
+  assert.match(d.text, /Money in: ₦2,000/);
+  assert.match(d.text, /Owed to me: ₦/);
+  assert.match(d.text, /- Emeka: ₦45,000/);
+  assert.doesNotMatch(d.text, /undefined|NaN/);
+});

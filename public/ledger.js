@@ -294,6 +294,38 @@ export function lowStockNote(state, lines) {
   return out.length ? " " + out.join(". ") + "." : "";
 }
 
+// The end-of-day debrief: today's totals, who owes, and what is running low.
+// `say` is what the voice reads out; `text` is the same day written down, to
+// keep or send on WhatsApp. Every figure comes from the books.
+export function dailyClose(state, now = new Date()) {
+  const from = periodStart("today", now);
+  const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
+  const day = summary(state, from, to);
+  const owing = debtors(state, now);
+  const owed = round2(owing.reduce((s, d) => s + d.balance, 0));
+  const low = state.products.filter(p => p.stock <= LOW_STOCK).sort((a, b) => a.stock - b.stock);
+
+  let say = day.say;
+  say += owing.length
+    ? ` ${cap(inWords(owing.length))} ${owing.length === 1 ? "person owes" : "people owe"} you ${spoken(owed)} in all. The biggest: ${owing.slice(0, 3).map(d => `${d.name}, ${spoken(d.balance)}`).join("; ")}.`
+    : " Nobody owes you anything.";
+  say += low.length ? ` Running low: ${low.map(p => `${p.say}, ${p.stock} left`).join("; ")}.` : " Nothing is running low.";
+
+  const date = now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  const out = [`*${state.shop.name}*`, `Day closed, ${date}`, ""];
+  if (day.sales || day.spent) {
+    out.push(`Sales: ${day.sales}, ${naira(day.sold)}`, `Money in: ${naira(day.cash)}`);
+    if (day.credit > 0) out.push(`On credit: ${naira(day.credit)}`);
+    if (day.spent) out.push(`Spent: ${naira(day.spent)}`);
+    if (day.sales) out.push(`Profit: ${naira(day.profit)}`);
+  } else out.push("Nothing recorded today.");
+  out.push("");
+  out.push(owing.length ? `Owed to me: ${naira(owed)} (${owing.length} ${owing.length === 1 ? "person" : "people"})` : "Nobody owes me.");
+  for (const d of owing.slice(0, 5)) out.push(`- ${d.name}: ${naira(d.balance)}`);
+  if (low.length) out.push("", "Running low:", ...low.map(p => `- ${p.say}: ${p.stock} left`));
+  return { say, text: out.join("\n") };
+}
+
 // Plain text of a receipt, ready to send to the customer on WhatsApp.
 export function receiptText(state, r) {
   const day = new Date(r.ts).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });

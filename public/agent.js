@@ -3,7 +3,7 @@
 // for, and the tools it must use to touch the books. The books never trust
 // the model with a number: tools compute everything and return the sentence
 // to read back.
-import { draftSale, draftPayment, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms, summary, periodStart, debtors, spoken, inWords } from "./ledger.js";
+import { dailyClose, draftSale, draftPayment, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms, summary, periodStart, debtors, spoken, inWords } from "./ledger.js";
 
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
 const YES = /\b(gbam|yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct|oya|save am)\b/i;
@@ -36,7 +36,8 @@ Rules:
 19. One short sentence per reply. You are talking to a busy person at a counter.
 20. Speech recognition often turns Pidgin "X don pay 40k" into "X don't pay 40k". The owner never needs to record a non-payment, so treat "X don't pay 40,000" like "X don pay 40,000": call draft_payment and read it back. The owner will say no if it was wrong.
 21. If the owner says "he", "she" or "him" and you do not know from this conversation which customer they mean, ask "Which customer?" and nothing else. If the earlier chat below names the last customer, use that customer.
-22. Every sale or payment the owner states is new, even if it sounds like one already saved ("also", "again", "another one", the same amount). Never say you have already saved it and never refuse. Draft it, read it back, and let the owner say yes or no. That is what protects them from doubles.${memoryNote(memory)}`;
+22. Every sale or payment the owner states is new, even if it sounds like one already saved ("also", "again", "another one", the same amount). Never say you have already saved it and never refuse. Draft it, read it back, and let the owner say yes or no. That is what protects them from doubles.
+23. "Close the day", "close for the day", "end of day", "wrap up", "how did the day go", "I dey close": call close_day.${memoryNote(memory)}`;
 }
 
 // What Gbam remembers from the last chat. It is only for knowing who and what
@@ -127,6 +128,9 @@ const TOOLS = [
       required: ["period"] } },
   { type: "function", name: "who_owes",
     description: "The customers who currently owe money, worst first, with how long they have owed it. Returns the sentence to say.",
+    parameters: { type: "object", properties: {} } },
+  { type: "function", name: "close_day",
+    description: "End-of-day debrief: today's sales and money in, who owes and how much, and what is running low. Also puts a written copy on screen that the owner can send on WhatsApp. Returns the sentence to say.",
     parameters: { type: "object", properties: {} } },
   { type: "function", name: "remind_customer",
     description: "Prepare a polite WhatsApp reminder to a customer about what they owe. It is shown on screen for the owner to send; nothing is sent automatically. Returns the sentence to say.",
@@ -352,6 +356,11 @@ export class ShopAgent {
       return { ok: true, say: summary(st, periodStart(args.period), new Date(), label).say };
     }
     if (name === "who_owes") return { ok: true, say: whoOwesSay(st) };
+    if (name === "close_day") {
+      const r = dailyClose(st);
+      this.on.dayClose?.(r.text);
+      return { ok: true, say: r.say };
+    }
     if (name === "remind_customer") {
       const r = reminder(st, args.customer);
       if (!r.ok) return { ok: false, error: r.error };

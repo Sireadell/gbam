@@ -202,3 +202,5 @@ a.primary { text-decoration: none; display: inline-block; }
 .msg.old { opacity: .55; }
 
 .sharebtn { display: inline-block; text-decoration: none; padding: 10px 14px; border-radius: 10px; background: var(--green); color: #fff; font-weight: 700; }
+
+#remindText { white-space: pre-line; }

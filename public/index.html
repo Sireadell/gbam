@@ -60,7 +60,7 @@
       </div>
 
       <div id="remind" class="remind" hidden>
-        <div class="draft-title">Reminder ready</div>
+        <div class="draft-title" id="remindTitle">Reminder ready</div>
         <p id="remindText"></p>
         <div class="draft-actions">
           <a id="remindSend" class="primary" target="_blank" rel="noopener">Send on WhatsApp</a>
@@ -96,6 +96,7 @@
         <button type="button" class="pill" data-period="today" aria-pressed="false">Today</button>
         <button type="button" class="pill on" data-period="week" aria-pressed="true">This week</button>
       </div>
+      <p style="margin:10px 0 0"><button type="button" class="ghost small" id="closeDayBtn">Close the day</button></p>
       <div class="hero">
         <span class="hero-label">Money in</span>
         <div id="dashMoneyIn" class="hero-num">₦0</div>
