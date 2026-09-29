@@ -9,7 +9,7 @@ const WS_URL = "wss://agents.assemblyai.com/v1/ws";
 const YES = /\b(gbam|yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct|oya|save am)\b/i;
 const NO = /\b(no|not|don'?t|wrong|cancel|wait|stop|change|no be so)\b/i;
 
-function systemPrompt(shop) {
+function systemPrompt(shop, memory) {
   return `You are Gbam, the voice record book of ${shop.name}, a provisions shop in ${shop.city}, Nigeria. The owner talks to you in Nigerian English or Nigerian Pidgin while serving customers. Understand Pidgin: "don pay" or "pay me" means paid, "carry" or "collect" or "take" means took goods, "e don finish" means sold out, "wetin X owe" means how much does X owe, "abeg" means please, "oya" means go ahead. Reply in plain simple English. You turn what they say into sale and payment records.
 
 Rules:
@@ -35,7 +35,18 @@ Rules:
 18. A sale paid by transfer or POS: pass payment_method. A discount ("give am 500 off", "remove 500"): pass discount in naira.
 19. One short sentence per reply. You are talking to a busy person at a counter.
 20. Speech recognition often turns Pidgin "X don pay 40k" into "X don't pay 40k". The owner never needs to record a non-payment, so treat "X don't pay 40,000" like "X don pay 40,000": call draft_payment and read it back. The owner will say no if it was wrong.
-21. If the owner says "he", "she" or "him" and you do not know from this conversation which customer they mean, ask "Which customer?" and nothing else.`;
+21. If the owner says "he", "she" or "him" and you do not know from this conversation which customer they mean, ask "Which customer?" and nothing else.${memoryNote(memory)}`;
+}
+
+// What Gbam remembers from the last chat. It is only for knowing who and what
+// the owner means. Numbers in it may be out of date, so they are never used.
+function memoryNote(memory) {
+  if (!memory?.lines?.length) return "";
+  const said = memory.lines.map(l => `${l.who}: ${l.text}`).join(" | ");
+  return `
+
+Earlier chat with this owner (from a previous session, only so you know who and what they mean, for example who "he" is). Never take a number from it: any amount or balance must come from a tool.${memory.customer ? ` The customer last talked about was ${memory.customer}.` : ""}
+${said}`;
 }
 
 const TOOLS = [
@@ -153,8 +164,8 @@ export class ShopAgent {
   sessionConfig() {
     const st = this.store.state;
     return {
-      system_prompt: systemPrompt(st.shop),
-      greeting: "I'm listening. Tell me a sale or a payment.",
+      system_prompt: systemPrompt(st.shop, this.store.memory),
+      greeting: this.store.memory?.customer ? `Welcome back. We were on ${this.store.memory.customer}. Tell me a sale or a payment.` : "I'm listening. Tell me a sale or a payment.",
       tools: TOOLS,
       input: {
         keyterms: shopKeyterms(st),

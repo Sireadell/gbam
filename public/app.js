@@ -5,10 +5,49 @@ const KEY = "pkv-shop-v1";
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
+// Gbam's memory of the last chat: who was being talked about and the last few
+// lines. Kept in this browser only, for 12 hours, and it never holds numbers
+// the agent may rely on: those always come from the books.
+const MEM_KEY = "pkv-memory-v1", MEM_HOURS = 12, MEM_LINES = 8;
+function loadMemory() {
+  try {
+    const m = JSON.parse(localStorage.getItem(MEM_KEY));
+    if (m && Array.isArray(m.lines) && Date.now() - m.ts < MEM_HOURS * 3600e3) return m;
+  } catch {}
+  return { ts: Date.now(), customer: null, lines: [] };
+}
 const store = {
   state: load(),
+  memory: loadMemory(),
   save() { try { localStorage.setItem(KEY, JSON.stringify(this.state)); } catch {} },
+  saveMemory() { this.memory.ts = Date.now(); try { localStorage.setItem(MEM_KEY, JSON.stringify(this.memory)); } catch {} },
+  forget() { this.memory = { ts: Date.now(), customer: null, lines: [] }; try { localStorage.removeItem(MEM_KEY); } catch {} },
 };
+function remember(cls, who, text) {
+  const t = String(text || "").trim();
+  if (!t) return;
+  store.memory.lines.push({ cls, who, text: t });
+  store.memory.lines = store.memory.lines.slice(-MEM_LINES);
+  store.saveMemory();
+}
+function showMemory() {
+  const m = store.memory;
+  $("#log").querySelectorAll(".msg.old").forEach(e => e.remove());
+  $("#memnote").hidden = !m.lines.length;
+  if (!m.lines.length) return;
+  $("#memtxt").textContent = m.customer ? `Gbam remembers your last chat, about ${m.customer}.` : "Gbam remembers your last chat.";
+  const log = $("#log");
+  log.querySelector(".empty")?.remove();
+  const frag = document.createDocumentFragment();
+  for (const l of m.lines) {
+    const el = document.createElement("div");
+    el.className = `msg ${l.cls} old`;
+    el.innerHTML = `<span class="who">${esc(l.who)}</span>${esc(l.text)}`;
+    frag.appendChild(el);
+  }
+  log.prepend(frag);
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -45,11 +84,11 @@ const agent = new ShopAgent({
     status: t => { $("#status").textContent = t; },
     ready: () => { setTyping(true); },
     hearing: on => { $("#micBtn").classList.toggle("hearing", on); $("#fabMic").classList.toggle("hearing", on); },
-    user: (text, final) => { partialYou = bubble("you", "You", text, final, partialYou); },
-    agent: (text, final) => { partialAgent = bubble("agent", "Gbam", text, final, partialAgent); },
+    user: (text, final) => { partialYou = bubble("you", "You", text, final, partialYou); if (final) remember("you", "You", text); },
+    agent: (text, final) => { partialAgent = bubble("agent", "Gbam", text, final, partialAgent); if (final) remember("agent", "Gbam", text); },
     draft: d => { renderDraft(d); if (d) bringTalk(); },
     saved: r => { renderAll(); if (r.customer) flash(r.customer); },
-    focus: name => flash(name),
+    focus: name => { flash(name); store.memory.customer = name; store.saveMemory(); showMemory(); },
     tool: logTool,
     reminder: (name, text) => { showReminder(name, text); bringTalk(); },
     ended: reason => setLive(false, reason),
@@ -473,13 +512,15 @@ $("#resetBtn").onclick = () => {
   }
   clearTimeout(armed); armed = null;
   $("#resetBtn").textContent = "Reset sample shop";
-  store.state = demoState(); store.save();
+  store.state = demoState(); store.save(); store.forget(); showMemory();
   agent.draft = null; renderDraft(null); renderAll();
   if (agent.ready) agent.send({ type: "session.update", session: { input: { keyterms: shopKeyterms(store.state) } } });
 };
 
 window.addEventListener("pagehide", () => { if (agent.ws?.readyState === 1) agent.ws.send(JSON.stringify({ type: "session.end" })); });
 
+$("#memForget").onclick = () => { store.forget(); showMemory(); renderAll(); };
 showTab(tabFromHash() || "talk", { skipHash: true });
 renderAll();
+showMemory();
 route();

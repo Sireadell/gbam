@@ -195,3 +195,8 @@ a.primary { text-decoration: none; display: inline-block; }
 @media (max-width: 819px) {
   .app.fab-on { padding-bottom: calc(152px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* Gbam's memory of the last chat. */
+.memnote { font-size: 13px; color: var(--muted); margin: 6px 0 4px; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--green); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.msg.old { opacity: .55; }
