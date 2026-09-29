@@ -207,6 +207,8 @@ export function draftSale(state, args) {
     let product = pm.match || null;
     let unit = it.unit_price != null && it.unit_price !== "" ? num(it.unit_price) : null;
     if (!product && pm.candidates && unit == null) { errs.push(`product '${it.product}' is unclear, close ones: ${pm.candidates.map(p => p.say).join(", ")}`); continue; }
+    // A price of 0 or a non-number from the model is not a price the owner said.
+    if (unit != null && !(unit > 0) && product) unit = null;
     if (unit == null) {
       if (!product) { errs.push(`'${it.product}' is not in the stock list, ask its price`); continue; }
       unit = product.price;

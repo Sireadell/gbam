@@ -477,3 +477,10 @@ test("bulk basket: a bad item is refused and the basket stays as it was", () => 
   assert.equal(basketRemove(s, a.basket, "sugar").ok, false);
   assert.equal(basketFinish(s, null, { customer: "Musa" }).ok, false);
 });
+
+test("a unit price of 0 from the model falls back to the shop's price", () => {
+  const s = demoState();
+  const r = basketAdd(s, null, { items: [{ product: "rice", quantity: 3, unit_price: 0 }] });
+  assert.ok(r.ok, r.error);
+  assert.equal(r.total, 9000);
+});
