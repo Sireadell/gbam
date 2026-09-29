@@ -245,14 +245,14 @@ export class ShopAgent {
 
   // The Voice Agent API bills for every second a session is open ($4.50 an
   // hour), so a quiet counter must not keep a session running. Hang up after
-  // 20 quiet seconds, or 60 while a draft waits for a yes.
+  // 45 quiet seconds, or 90 while a draft waits for a yes.
   bumpIdle() {
     clearTimeout(this.idleTimer);
     if (!this.ready) return;
     this.idleTimer = setTimeout(() => {
       this.endReason = "Hung up after a quiet spell, to save cost. Tap to talk again.";
       this.stop();
-    }, this.draft ? 60000 : 20000);
+    }, this.draft ? 90000 : 45000);
   }
 
   handle(m) {
