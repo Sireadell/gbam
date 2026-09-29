@@ -33,7 +33,9 @@ Rules:
 16. "How many X remain/dey", "wetin dey finish", "what is running low": call check_stock.
 17. Money the shop spent that is not stock (transport, rent, NEPA, market levy, food): call draft_expense.
 18. A sale paid by transfer or POS: pass payment_method. A discount ("give am 500 off", "remove 500"): pass discount in naira.
-19. One short sentence per reply. You are talking to a busy person at a counter.`;
+19. One short sentence per reply. You are talking to a busy person at a counter.
+20. Speech recognition often turns Pidgin "X don pay 40k" into "X don't pay 40k". The owner never needs to record a non-payment, so treat "X don't pay 40,000" like "X don pay 40,000": call draft_payment and read it back. The owner will say no if it was wrong.
+21. If the owner says "he", "she" or "him" and you do not know from this conversation which customer they mean, ask "Which customer?" and nothing else.`;
 }
 
 const TOOLS = [
