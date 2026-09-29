@@ -228,6 +228,18 @@ export class ShopAgent {
     return { mic };
   }
 
+  // "Noisy place" mode: the mic is off until the owner holds the button. When
+  // they let go, a short stretch of silence tells the agent the turn is over.
+  hold(on) {
+    clearInterval(this.tail);
+    if (on) { this.muted = false; return; }
+    let n = 0;
+    this.tail = setInterval(() => {
+      if (this.ready && this.ws?.readyState === 1 && n < 16) this.send({ type: "input.audio", audio: b64(new Int16Array(1200).buffer) });
+      if (++n >= 16) { clearInterval(this.tail); this.muted = true; }
+    }, 50);
+  }
+
   stop() {
     if (this.ws?.readyState === 1) this.send({ type: "session.end" });
     else this.cleanup();

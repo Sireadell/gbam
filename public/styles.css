@@ -204,3 +204,7 @@ a.primary { text-decoration: none; display: inline-block; }
 .sharebtn { display: inline-block; text-decoration: none; padding: 10px 14px; border-radius: 10px; background: var(--green); color: #fff; font-weight: 700; }
 
 #remindText { white-space: pre-line; }
+
+.noisy-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 4px 0 6px; }
+.noisy-row label { display: flex; align-items: center; gap: 8px; }
+#micBtn, #fabMic { touch-action: manipulation; }

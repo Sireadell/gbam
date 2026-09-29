@@ -159,7 +159,27 @@ $("#fabMic").onclick = () => {
 // ---------- talk ----------
 
 let live = false;
+// "Noisy place" mode: while live, the mic listens only while it is held down.
+const noisyOn = () => $("#noisyMode").checked;
+try { $("#noisyMode").checked = localStorage.getItem("pkv-noisy") === "1"; } catch {}
+function applyNoisy() {
+  try { localStorage.setItem("pkv-noisy", noisyOn() ? "1" : "0"); } catch {}
+  if (agent) agent.muted = live && noisyOn();
+  $("#endBtn").hidden = !(live && noisyOn());
+  $("#micLabel").textContent = live ? (noisyOn() ? "Hold the mic and talk" : "Listening. Tap to stop") : "Tap to start talking";
+}
+$("#noisyMode").onchange = applyNoisy;
+$("#endBtn").onclick = () => { agent.stop(); setLive(false); };
+function bindHold(el) {
+  const down = e => { if (!(live && noisyOn())) return; e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch {} agent.hold(true); el.classList.add("hearing"); };
+  const up = () => { if (!(live && noisyOn())) return; agent.hold(false); el.classList.remove("hearing"); };
+  el.addEventListener("pointerdown", down);
+  for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) el.addEventListener(t, up);
+}
+bindHold($("#micBtn")); bindHold($("#fabMic"));
+
 $("#micBtn").onclick = async () => {
+  if (live && noisyOn()) return;                    // holding is how you talk now
   if (live) { agent.stop(); setLive(false); return; }
   $("#micBtn").disabled = true;
   $("#status").textContent = "Connecting to AssemblyAI...";
@@ -179,6 +199,7 @@ function setLive(on, reason) {
   $("#fabMic").setAttribute("aria-label", on ? "Stop talking" : "Talk");
   if (!on) { $("#micBtn").classList.remove("hearing"); $("#fabMic").classList.remove("hearing"); }
   $("#micLabel").textContent = on ? "Listening. Tap to stop" : "Tap to start talking";
+  if (typeof applyNoisy === "function") applyNoisy();
   if (!on) { $("#status").textContent = reason || "Stopped. Tap to start again."; setTyping(false); }
 }
 function setTyping(on) {
