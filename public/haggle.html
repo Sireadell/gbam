@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gbam haggle</title>
+<meta name="description" content="Put the phone down while you haggle. Gbam tells the two voices apart and writes up the price you agreed.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231f5f3f'/><text x='16' y='22' font-size='15' font-family='Arial' font-weight='700' text-anchor='middle' fill='white'>G</text></svg>">
+<link rel="stylesheet" href="/styles.css">
+<style>
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px 32px; display: grid; gap: 16px; }
+  .intro h1 { font-size: 26px; margin: 0 0 6px; }
+  .intro p { margin: 6px 0; color: var(--muted); }
+  .row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .lines { display: grid; gap: 8px; min-height: 72px; }
+  .line { display: grid; grid-template-columns: 64px 1fr; gap: 10px; font-size: 18px; line-height: 1.4; }
+  .who { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding-top: 5px; }
+  .line.b .who { color: var(--green); }
+  .line.b .say { border-left: 3px solid var(--green); padding-left: 10px; }
+  .line.a .say { border-left: 3px solid var(--line); padding-left: 10px; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .fields label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  .fields input, .fields select { font-size: 17px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--ink); }
+  .total { font-size: 22px; font-weight: 700; margin: 12px 0 4px; }
+  .msg { font-weight: 700; margin-top: 10px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="mark">G</span><div><strong>Gbam haggle</strong><span class="shop">Let Gbam listen to the bargaining</span></div></div>
+  <a class="ghost small" href="/" style="text-decoration:none">Back to Gbam</a>
+</header>
+
+<main class="wrap">
+  <section class="card intro">
+    <h1>Haggle first. Gbam writes the receipt.</h1>
+    <p>Tap the microphone and haggle with your customer as normal. AssemblyAI tells the two voices apart. When you stop, Gbam picks out the last price you agreed and prepares the sale. Nothing is saved until you tap Save.</p>
+    <p>To try it alone, play both sides: "How much is the rice?" ... "Three thousand five hundred a bag." ... "Two bags, two thousand eight hundred." ... "Okay, three thousand each."</p>
+    <div class="row">
+      <button id="mic" class="mic" aria-label="Start listening"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"/></svg></button>
+      <div><div id="label" class="mic-label">Tap to listen</div><div id="status" class="status">Needs a microphone. Works best in Chrome. Listens for up to 2 minutes.</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>What was said</h2>
+    <div class="lines" id="lines"><span class="status">Nothing yet.</span></div>
+  </section>
+
+  <section class="card" id="deal" hidden>
+    <h2>The deal Gbam heard</h2>
+    <p class="hint" id="dealNote" style="margin:0 0 10px"></p>
+    <div class="fields">
+      <label>Product<select id="fProduct"></select></label>
+      <label>Customer<select id="fCustomer"></select></label>
+      <label>How many<input id="fQty" type="number" min="1" step="1" inputmode="numeric"></label>
+      <label>Price each (₦)<input id="fPrice" type="number" min="1" step="50" inputmode="numeric"></label>
+    </div>
+    <div class="total" id="total"></div>
+    <div class="row"><button id="save" class="primary" type="button">Save this sale</button><button id="discard" class="ghost" type="button">Discard</button></div>
+    <div class="msg" id="msg"></div>
+  </section>
+</main>
+<script type="module" src="/haggle.js"></script>
+</body>
+</html>
