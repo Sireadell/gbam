@@ -413,3 +413,22 @@ test("amounts written like a person writes them are understood", async () => {
   assert.equal(r.draft.total, 6000);
   assert.equal(r.draft.paid, 2000);
 });
+
+test("the yes gate: real ways of agreeing pass, real objections do not", async () => {
+  const { isYes } = await import("../public/agent.js");
+  for (const t of ["Yes.", "yes o, no wahala", "Yes, no problem", "alright", "all right", "fine", "proceed", "do it", "e good", "ehen", "abeg save am", "Gbam!", "Yes, change nothing", "okay save", "true"])
+    assert.ok(isYes(t), "should agree: " + t);
+  for (const t of ["no", "no wait", "not yet", "wait", "don't save", "cancel", "wrong", "stop", "no be so", "yes wait", "yes but change the price", "hello"])
+    assert.ok(!isYes(t), "should not agree: " + t);
+});
+
+test("sloppy tool arguments are still understood", () => {
+  const s = freshState();
+  assert.equal(draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: "two" }] }).draft.total, 6000);
+  assert.equal(draftSale(s, { customer: "Musa", items: [{ product: "rice", quantity: "2 bags" }] }).draft.total, 6000);
+  assert.equal(draftSale(s, { customer: "Musa", items: { product: "rice", quantity: 1 } }).draft.total, 3000);
+  assert.equal(draftSale(s, { customer: "Musa", amount_paid: "full", items: [{ product: "rice", quantity: 1 }] }).draft.paid, 3000);
+  assert.equal(draftPayment(s, { customer: "Emeka", amount: "twenty thousand" }).draft.amount, 20000);
+  assert.equal(draftPayment(s, { customer: "Emeka", amount: "two thousand five hundred" }).draft.amount, 2500);
+  assert.match(draftPayment(s, { amount: 1000 }).error, /name is missing/);
+});

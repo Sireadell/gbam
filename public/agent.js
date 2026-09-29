@@ -6,8 +6,16 @@
 import { dailyClose, draftSale, draftPayment, draftRestock, draftNewProduct, draftPriceChange, draftExpense, stockReport, commit, undo, todaySummary, reminder, balanceOf, bestMatch, standingText, shopKeyterms, summary, periodStart, debtors, spoken, inWords } from "./ledger.js";
 
 const WS_URL = "wss://agents.assemblyai.com/v1/ws";
-const YES = /\b(gbam|yes|yeah|yep|yup|correct|confirm(ed)?|save( it)?|ok(ay)?|go ahead|do am|sure|that'?s right|na so|e correct|oya|save am)\b/i;
+const YES = /\b(gbam|yes|yeah|yep|yup|ehen|correct|confirm(ed)?|save( it| am)?|ok(ay)?|al{1,2} ?right|fine|proceed|do it|go ahead|do am|sure|true|right|that'?s right|na so|e correct|e good|e dey (ok|okay|fine|correct)|oya)\b/i;
 const NO = /\b(no|not|don'?t|wrong|cancel|wait|stop|change|no be so)\b/i;
+// "no problem", "no wahala", "not bad", "change nothing" sound negative but agree.
+const BENIGN_NO = /\b(no (problem|wahala|worry|worries|doubt|issue|need|change)|not bad|not a problem|change nothing|nothing to change|no be (wahala|problem))\b/gi;
+
+// Did the owner clearly agree? A word of agreement, and no real objection.
+export function isYes(text) {
+  const t = String(text || "");
+  return YES.test(t) && !NO.test(t.replace(BENIGN_NO, " "));
+}
 
 function systemPrompt(shop, memory) {
   return `You are Gbam, the voice record book of ${shop.name}, a provisions shop in ${shop.city}, Nigeria. The owner talks to you in Nigerian English or Nigerian Pidgin while serving customers. Understand Pidgin: "don pay" or "pay me" means paid, "carry" or "collect" or "take" means took goods, "e don finish" means sold out, "wetin X owe" means how much does X owe, "abeg" means please, "oya" means go ahead. Reply in plain simple English. You turn what they say into sale and payment records.
@@ -337,7 +345,7 @@ export class ShopAgent {
     if (name === "confirm_draft") {
       if (!this.draft) return { ok: false, error: "There is nothing waiting to be saved. Ask what they want to record." };
       // The owner's own words decide, not the model's reading of them.
-      if (!YES.test(this.lastUser) || NO.test(this.lastUser))
+      if (!isYes(this.lastUser))
         return { ok: false, error: `Not saved: the owner's last words were "${this.lastUser}", which is not a clear yes. Ask them to say yes to save, or tell you what to change.` };
       return { ok: true, say: this.save() };
     }

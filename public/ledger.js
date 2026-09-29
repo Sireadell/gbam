@@ -52,10 +52,34 @@ export function freshState() {
 export function num(v) {
   if (typeof v === "number") return v;
   const s = String(v ?? "").toLowerCase().replace(/₦|naira|ngn|,/g, "").trim();
-  const m = s.match(/^(\d+(?:\.\d+)?)\s*(k|thousand|m|million)?$/);
-  if (!m) return Number(s);
-  const scale = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6 }[m[2]] || 1;
-  return parseFloat(m[1]) * scale;
+  // "10", "10k", "10 thousand", "2.5 million", and "2 bags" (a number then a unit word)
+  const m = s.match(/^(\d+(?:\.\d+)?)\s*(k|thousand|m|million)?(?![a-z])(?:\s+[a-z][a-z\s-]*)?$/);
+  if (m) {
+    const scale = { k: 1e3, thousand: 1e3, m: 1e6, million: 1e6 }[m[2]] || 1;
+    return parseFloat(m[1]) * scale;
+  }
+  const w = WORD_NUMBER(s);
+  return w == null ? Number(s) : w;
+}
+
+// "two", "twenty thousand", "two thousand five hundred", "one hundred and fifty"
+const WN_ONES = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11,
+  twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, a: 1, half: 0.5 };
+const WN_TENS = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+function WORD_NUMBER(s) {
+  const words = s.replace(/-/g, " ").split(/\s+/).filter(Boolean);
+  let total = 0, chunk = 0, seen = false;
+  for (const x of words) {
+    if (x in WN_ONES) { chunk += WN_ONES[x]; seen = true; }
+    else if (x in WN_TENS) { chunk += WN_TENS[x]; seen = true; }
+    else if (x === "hundred" && seen) chunk = (chunk || 1) * 100;
+    else if (x === "thousand" && seen) { total += (chunk || 1) * 1e3; chunk = 0; }
+    else if (x === "million" && seen) { total += (chunk || 1) * 1e6; chunk = 0; }
+    else if (x === "and") continue;
+    else if (seen) break;                       // a unit word after the number: "two bags"
+    else return null;
+  }
+  return seen ? total + chunk : null;
 }
 
 export function round2(n) { return Math.round(n * 100) / 100; }
@@ -173,7 +197,7 @@ export function draftSale(state, args) {
     else return fail(`No customer called '${heardName}'. Ask the owner if '${titleCase(heardName)}' is a new customer; if yes, call draft_sale again with add_new_customer true.`);
   }
 
-  const items = Array.isArray(args.items) ? args.items : [];
+  const items = Array.isArray(args.items) ? args.items : args.items && typeof args.items === "object" ? [args.items] : [];
   if (!items.length) return fail("No products given. Ask what was sold.");
   const lines = [];
   for (const it of items) {
@@ -210,7 +234,8 @@ export function draftSale(state, args) {
   const discount = num(args.discount) > 0 ? round2(num(args.discount)) : 0;
   if (discount >= gross) return fail(`A discount of ${spoken(discount)} is more than the sale itself (${spoken(gross)}). Ask the owner for the discount again.`);
   const total = round2(gross - discount);
-  const paid = args.amount_paid != null && args.amount_paid !== "" ? num(args.amount_paid) : (customer ? 0 : total);
+  const paidAll = /^(all|full|fully|everything|complete|whole|in full|paid)$/i.test(String(args.amount_paid ?? "").trim());
+  const paid = paidAll ? total : args.amount_paid != null && args.amount_paid !== "" ? num(args.amount_paid) : (customer ? 0 : total);
   const method = paymentMethod(args.payment_method);
   if (!(paid >= 0)) return fail("amount_paid is not a number. Ask how much was paid.");
   if (!customer && paid < total) return fail(`A sale with no customer name must be paid in full (${spoken(total)}). Ask who the customer is, so the rest can go on their account.`);
@@ -240,6 +265,7 @@ export function draftPayment(state, args) {
   const heardName = String(args.customer || "").trim();
   const amount = num(args.amount);
   if (!(amount > 0)) return fail("Payment amount is missing. Ask how much was paid.");
+  if (!heardName) return fail("The customer's name is missing. Ask who paid.");
   const m = bestMatch(state.customers, heardName, ["name"]);
   let customer = m.match, isNew = false;
   if (!customer) {
