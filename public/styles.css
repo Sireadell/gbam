@@ -208,3 +208,5 @@ a.primary { text-decoration: none; display: inline-block; }
 .noisy-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 4px 0 6px; }
 .noisy-row label { display: flex; align-items: center; gap: 8px; }
 #micBtn, #fabMic { touch-action: manipulation; }
+
+.mic.muted, #fabMic.muted { background: var(--muted); box-shadow: none; animation: none; }

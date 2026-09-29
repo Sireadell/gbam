@@ -82,7 +82,7 @@ let partialYou = null, partialAgent = null;
 const agent = new ShopAgent({
   store,
   on: {
-    status: t => { $("#status").textContent = t; },
+    status: t => { $("#status").textContent = live && noisyOn() && t === "Listening" ? NOISY_IDLE : t; },
     ready: () => { setTyping(true); },
     hearing: on => { $("#micBtn").classList.toggle("hearing", on); $("#fabMic").classList.toggle("hearing", on); },
     user: (text, final) => { partialYou = bubble("you", "You", text, final, partialYou); if (final) remember("you", "You", text); },
@@ -160,19 +160,22 @@ $("#fabMic").onclick = () => {
 
 let live = false;
 // "Noisy place" mode: while live, the mic listens only while it is held down.
+const NOISY_IDLE = "Mic is off. Hold it while you talk.";
 const noisyOn = () => $("#noisyMode").checked;
 try { $("#noisyMode").checked = localStorage.getItem("pkv-noisy") === "1"; } catch {}
 function applyNoisy() {
   try { localStorage.setItem("pkv-noisy", noisyOn() ? "1" : "0"); } catch {}
   if (agent) agent.muted = live && noisyOn();
   $("#endBtn").hidden = !(live && noisyOn());
+  for (const id of ["#micBtn", "#fabMic"]) $(id).classList.toggle("muted", live && noisyOn());
+  if (live && noisyOn()) $("#status").textContent = NOISY_IDLE;
   $("#micLabel").textContent = live ? (noisyOn() ? "Hold the mic and talk" : "Listening. Tap to stop") : "Tap to start talking";
 }
 $("#noisyMode").onchange = applyNoisy;
 $("#endBtn").onclick = () => { agent.stop(); setLive(false); };
 function bindHold(el) {
-  const down = e => { if (!(live && noisyOn())) return; e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch {} agent.hold(true); el.classList.add("hearing"); };
-  const up = () => { if (!(live && noisyOn())) return; agent.hold(false); el.classList.remove("hearing"); };
+  const down = e => { if (!(live && noisyOn())) return; e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch {} agent.hold(true); el.classList.add("hearing"); el.classList.remove("muted"); $("#status").textContent = "Listening..."; };
+  const up = () => { if (!(live && noisyOn())) return; agent.hold(false); el.classList.remove("hearing"); el.classList.add("muted"); $("#status").textContent = NOISY_IDLE; };
   el.addEventListener("pointerdown", down);
   for (const t of ["pointerup", "pointercancel", "lostpointercapture"]) el.addEventListener(t, up);
 }
