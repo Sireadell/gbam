@@ -570,6 +570,8 @@ $("#resetBtn").onclick = () => {
 
 window.addEventListener("pagehide", () => { if (agent.ws?.readyState === 1) agent.ws.send(JSON.stringify({ type: "session.end" })); });
 
+// Clear chat: a fresh-looking Talk tab. Sales, customers and any waiting draft are untouched.
+$("#clearChat").onclick = () => { store.forget(); $("#log").innerHTML = ""; partialYou = partialAgent = null; showMemory(); renderAll(); };
 $("#memForget").onclick = () => { store.forget(); showMemory(); renderAll(); };
 showTab(tabFromHash() || "talk", { skipHash: true });
 renderAll();
