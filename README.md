@@ -11,11 +11,47 @@ Say the sale. Gbam records it.
 
 **Live demo:** https://gbam-chi.vercel.app (no sign-up) · **Proof:** https://gbam-chi.vercel.app/proof.html
 
+## Gbam at a glance
+
+| | |
+|---|---|
+| **The problem** | A trader serving customers cannot stop to type. Notebooks do not work out balances. Credit gets forgotten. |
+| **What Gbam does** | The owner says the sale in English or Pidgin. Gbam reads it back with the customer's new balance. On "yes" it saves it. |
+| **Built on** | AssemblyAI Voice Agent API (hears, decides, speaks), key terms, transcription prompt, tool calls, and streaming speaker labels for haggle mode |
+| **The rule** | The AI never does the maths, and nothing is saved before the owner says yes |
+| **Who it is for** | Small shop owners in Nigerian markets. Free for a shop's first month, then a small monthly fee per shop |
+| **Made by** | A trader who keeps the books for a real shop and uses it every day |
+
+## Try it in 60 seconds
+
+1. Open https://gbam-chi.vercel.app. No sign-up. A sample shop, "Mama Bisi Provisions", is already loaded.
+2. Tap the microphone and say: **"Two bags of rice, three thousand each, to Musa."**
+3. Gbam reads it back: total and Musa's new balance. Say **"Yes."**
+4. Open **Trades**, tap the receipt, and send it on WhatsApp.
+5. Say **"Close the day"** for a spoken debrief.
+6. No microphone? Type the sentence instead. Gbam still answers out loud.
+
+## What a reviewer can check
+
+| Claim | How to check it |
+|---|---|
+| Shop names change what AssemblyAI hears | Open [proof.html](public/proof.html). Same voice, heard twice, with and without the key terms. |
+| The maths is exact | `npm test` runs 51 tests on the ledger. Every number spoken comes from [`public/ledger.js`](public/ledger.js). |
+| Nothing is saved without a yes | `confirm_draft` in [`public/agent.js`](public/agent.js) checks the owner's own transcript, not the model's opinion. |
+| It is a working product | Live demo above. No login. Data stays in your browser. |
+
+## Honest limits
+
+- English and Pidgin only. Hausa, Yoruba and Igbo are not supported for live speech by AssemblyAI yet.
+- Haggle mode is early. Speaker labels can mix two voices, so it only proposes the last price said and the owner taps Save. Tested on recordings, not yet in a real haggle.
+- The demo uses a sample shop stored in your browser. There are no accounts and no cloud copy yet.
+- A voice session costs about $4.50 per hour, so Gbam hangs up after a quiet spell to save cost.
+
 ## Why I built this
 
 I built Gbam because I run a business in a Nigerian market and know what happens when you're serving customers, pricing goods and trying to remember credit at the same time.
 
-Typing every sale into a phone slows me down. Keeping a notebook doesn't calculate balances for me. Hiring someone to handle records adds a cost I don't need.
+I opened my shop in December 2025. I kept forgetting what I sold and how much I paid for my stock, so in 2026 I built PriceKeeper, my own record book. Typing every sale into a phone still slows me down. Keeping a notebook doesn't calculate balances for me. Hiring someone to handle records adds a cost I don't need.
 
 I wanted to speak a sale naturally and have the record come back to me before it was saved. That's how Gbam started.
 
@@ -89,7 +125,7 @@ Needs Node 20+ and an AssemblyAI API key. No other dependencies.
 ```bash
 cp .env.example .env        # put your key in it
 npm run dev                 # http://localhost:5178
-npm test                    # ledger maths tests
+npm test                    # 51 tests: ledger, basket, haggle
 ```
 
 Tap the microphone and talk. No microphone? Tap start anyway and type, or tap one of the sample sentences: the agent still answers out loud.
@@ -115,7 +151,9 @@ Deep links: `/#receipt=GB-0926-001` opens a saved receipt, so it can be sent to 
 | `public/ledger.js` | The books: matching, maths, drafts, saving, the read-back sentences |
 | `public/app.js` | The screen |
 | `public/proof.html`, `public/proof.js`, `api/stt-token.js` | The side-by-side proof page and its token route |
+| `public/haggle.html`, `public/haggle.js`, `public/haggle-parse.js` | Early haggle mode: speaker labels, then the last price said becomes a draft the owner saves |
 | `public/pcm-worklet.js` | Microphone to 24 kHz PCM, works on Chrome, Firefox and Safari |
+| `test/haggle.test.mjs` | Tests for picking the product, quantity and last price from a haggle |
 | `test/ledger.test.mjs` | Tests for the maths, deposits, name matching and the "13,000 is not 3,000" case |
 
 ## About PriceKeeper
