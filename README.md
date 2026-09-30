@@ -55,7 +55,7 @@ I opened my shop in December 2025. I kept forgetting what I sold and how much I 
 
 I wanted to speak a sale naturally and have the record come back to me before it was saved. That's how Gbam started.
 
-I built it for myself first, as the voice layer for [PriceKeeper](#about-pricekeeper), the record book I already run my business on: over ₦8.8 million of sales recorded in it in 5 months.
+I built it for myself first, as the voice layer for [PriceKeeper](#about-pricekeeper), the record book I already run my business on: over ₦8 million of sales recorded in it in 5 months.
 
 ## Why AssemblyAI is the core, not an add-on
 
